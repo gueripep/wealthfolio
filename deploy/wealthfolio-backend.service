@@ -4,20 +4,20 @@ After=network.target
 
 [Service]
 Type=simple
-User=deploy
-WorkingDirectory=/home/deploy/wealthfolio/backend
-ExecStart=/home/deploy/wealthfolio/backend/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000
+User=YOUR_USER
+WorkingDirectory=%h/wealthfolio/backend
+ExecStart=%h/wealthfolio/backend/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000
 Restart=always
 RestartSec=5
 
 # Logging
-StandardOutput=append:/home/deploy/wealthfolio/backend/server.log
-StandardError=append:/home/deploy/wealthfolio/backend/server.log
+StandardOutput=append:%h/wealthfolio/backend/server.log
+StandardError=append:%h/wealthfolio/backend/server.log
 
 # Hardening
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=/home/deploy/wealthfolio/backend
+ReadWritePaths=%h/wealthfolio/backend
 
 [Install]
 WantedBy=multi-user.target
