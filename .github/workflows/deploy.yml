@@ -87,6 +87,10 @@ jobs:
 
           cd ~/wealthfolio/backend
 
+          # Ensure python3-venv is installed
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq python3-venv
+
           # Create venv if it doesn't exist
           if [ ! -d ".venv" ]; then
             python3 -m venv .venv
