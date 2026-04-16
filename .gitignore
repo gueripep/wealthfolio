@@ -8,8 +8,8 @@ env/
 *.egg-info/
 
 # Backend data & logs
-backend/cache.db
-backend/cache.db-journal
+backend/*.db
+backend/*.db-journal
 backend/*.log
 
 # Node / Frontend

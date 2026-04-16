@@ -15,6 +15,19 @@ export default function Dashboard({ navigate, openModal }) {
   
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(false);
+
+  const getGradient = (ctx, chartArea, scales) => {
+    const { y } = scales;
+    const zeroPos = y.getPixelForValue(0);
+    const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+    const stop = (zeroPos - chartArea.top) / (chartArea.bottom - chartArea.top);
+    const clampedStop = Math.max(0, Math.min(stop, 1));
+    gradient.addColorStop(0, '#10b981');
+    gradient.addColorStop(clampedStop, '#10b981');
+    gradient.addColorStop(clampedStop, '#ef4444');
+    gradient.addColorStop(1, '#ef4444');
+    return gradient;
+  };
   
   const assets = getAssetSummary(portfolio, currentPrices);
 
@@ -198,7 +211,12 @@ export default function Dashboard({ navigate, openModal }) {
                   {
                     label: 'Portfolio',
                     data: analytics.relativeGains,
-                    borderColor: '#10b981',
+                    borderColor: (context) => {
+                      const chart = context.chart;
+                      const {ctx, chartArea} = chart;
+                      if (!chartArea) return '#10b981';
+                      return getGradient(ctx, chartArea, chart.scales);
+                    },
                     borderWidth: 2,
                     pointRadius: 0,
                     tension: 0.2,
@@ -206,9 +224,6 @@ export default function Dashboard({ navigate, openModal }) {
                       target: 'origin',
                       above: 'rgba(16, 185, 129, 0.15)',
                       below: 'rgba(239, 68, 68, 0.15)'
-                    },
-                    segment: {
-                      borderColor: ctx => ctx.p1.parsed.y < 0 ? '#ef4444' : '#10b981',
                     }
                   },
                   ...(analytics.sp500RelativeGains?.length ? [{
