@@ -42,24 +42,41 @@ jobs:
       # ── Deploy backend ────────────────────────────────────────
       - name: Deploy backend
         run: |
-          rsync -avz --delete \
+          tar czf /tmp/backend.tar.gz \
             --exclude='__pycache__' \
             --exclude='*.pyc' \
             --exclude='*.db' \
             --exclude='*.db-journal' \
             --exclude='*.log' \
             --exclude='.venv' \
-            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
-            backend/ \
-            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/wealthfolio/backend/
+            -C backend .
+
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "mkdir -p ~/wealthfolio/backend"
+
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            /tmp/backend.tar.gz \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/tmp/backend.tar.gz
+
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+            "cd ~/wealthfolio/backend && tar xzf /tmp/backend.tar.gz && rm /tmp/backend.tar.gz"
 
       # ── Deploy frontend build ─────────────────────────────────
       - name: Deploy frontend
         run: |
-          rsync -avz --delete \
-            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no" \
-            frontend/dist/ \
-            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/wealthfolio/frontend/dist/
+          tar czf /tmp/frontend.tar.gz -C frontend/dist .
+
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "mkdir -p ~/wealthfolio/frontend/dist"
+
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            /tmp/frontend.tar.gz \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/tmp/frontend.tar.gz
+
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} \
+            "cd ~/wealthfolio/frontend/dist && rm -rf ./* && tar xzf /tmp/frontend.tar.gz && rm /tmp/frontend.tar.gz"
 
       # ── Install deps & restart services on server ─────────────
       - name: Install dependencies & restart
