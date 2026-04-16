@@ -93,12 +93,13 @@ jobs:
 
           # Create venv if it doesn't exist
           if [ ! -d ".venv" ]; then
-            python3 -m venv .venv
+            python3 -m venv --without-pip .venv
+            .venv/bin/python3 -m ensurepip --default-pip
           fi
 
           # Install / update Python dependencies
-          .venv/bin/pip install --quiet --upgrade pip
-          .venv/bin/pip install --quiet -r requirements.txt
+          .venv/bin/python3 -m pip install --quiet --upgrade pip
+          .venv/bin/python3 -m pip install --quiet -r requirements.txt
 
           # Restart the backend service (systemd)
           sudo systemctl restart wealthfolio-backend
