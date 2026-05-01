@@ -1,10 +1,20 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Pencil, Trash2, Plus } from 'lucide-react';
 import { usePortfolio } from '../context/PortfolioContext';
 
 export default function SettingsView() {
   const { currentUser, logout, portfolio, savePortfolio } = usePortfolio();
   const [newCatName, setNewCatName] = useState('');
+  const [localTargets, setLocalTargets] = useState(portfolio.targetAllocation || {});
+  const [localTargetNetExposure, setLocalTargetNetExposure] = useState(portfolio.targetNetExposure || 1.0);
+  const [hasUnsavedTargets, setHasUnsavedTargets] = useState(false);
+
+  useEffect(() => {
+    if (!hasUnsavedTargets) {
+      setLocalTargets(portfolio.targetAllocation || {});
+      setLocalTargetNetExposure(portfolio.targetNetExposure || 1.0);
+    }
+  }, [portfolio.targetAllocation, portfolio.targetNetExposure, hasUnsavedTargets]);
 
   const handleBaseCurrencyChange = (e) => {
     savePortfolio({ ...portfolio, baseCurrency: e.target.value });
@@ -23,6 +33,12 @@ export default function SettingsView() {
     }
   };
 
+  const toggleDebtCategory = (cat, isDebt) => {
+    const debts = portfolio.debtCategories || [];
+    const newDebts = isDebt ? [...debts, cat] : debts.filter(c => c !== cat);
+    savePortfolio({ ...portfolio, debtCategories: newDebts });
+  };
+
   const renameCategory = (oldName) => {
     const newName = window.prompt(`Enter new name for "${oldName}":`, oldName);
     if (!newName || newName.trim() === '' || newName === oldName) return;
@@ -34,9 +50,24 @@ export default function SettingsView() {
     const newCustom = portfolio.customCategories.map(c => c === oldName ? trimmed : c);
     const newCats = { ...portfolio.categories };
     Object.keys(newCats).forEach(sym => {
-      if (newCats[sym] === oldName) newCats[sym] = trimmed;
+      const currentCat = newCats[sym];
+      if (typeof currentCat === 'string') {
+        if (currentCat === oldName) newCats[sym] = trimmed;
+      } else if (typeof currentCat === 'object' && currentCat !== null) {
+        if (currentCat[oldName] !== undefined) {
+          const val = currentCat[oldName];
+          delete currentCat[oldName];
+          currentCat[trimmed] = val;
+        }
+      }
     });
-    savePortfolio({ ...portfolio, customCategories: newCustom, categories: newCats });
+    const newDebts = (portfolio.debtCategories || []).map(c => c === oldName ? trimmed : c);
+    const newTargetAllocation = { ...(portfolio.targetAllocation || {}) };
+    if (newTargetAllocation[oldName] !== undefined) {
+      newTargetAllocation[trimmed] = newTargetAllocation[oldName];
+      delete newTargetAllocation[oldName];
+    }
+    savePortfolio({ ...portfolio, customCategories: newCustom, categories: newCats, debtCategories: newDebts, targetAllocation: newTargetAllocation });
   };
 
   const removeCategory = (catName) => {
@@ -49,9 +80,24 @@ export default function SettingsView() {
       const fallback = newCustom[0] || 'Other';
       const newCats = { ...portfolio.categories };
       Object.keys(newCats).forEach(sym => {
-        if (newCats[sym] === catName) newCats[sym] = fallback;
+        const currentCat = newCats[sym];
+        if (typeof currentCat === 'string') {
+          if (currentCat === catName) newCats[sym] = fallback;
+        } else if (typeof currentCat === 'object' && currentCat !== null) {
+          if (currentCat[catName] !== undefined) {
+            const val = currentCat[catName];
+            delete currentCat[catName];
+            currentCat[fallback] = (currentCat[fallback] || 0) + val;
+          }
+        }
       });
-      savePortfolio({ ...portfolio, customCategories: newCustom, categories: newCats });
+      const newDebts = (portfolio.debtCategories || []).filter(c => c !== catName);
+      const newTargetAllocation = { ...(portfolio.targetAllocation || {}) };
+      if (newTargetAllocation[catName] !== undefined) {
+        newTargetAllocation[fallback] = (newTargetAllocation[fallback] || 0) + newTargetAllocation[catName];
+        delete newTargetAllocation[catName];
+      }
+      savePortfolio({ ...portfolio, customCategories: newCustom, categories: newCats, debtCategories: newDebts, targetAllocation: newTargetAllocation });
     }
   };
 
@@ -114,7 +160,20 @@ export default function SettingsView() {
       <div id="category-list">
         {portfolio.customCategories.map(cat => (
           <div className="category-row" key={cat}>
-            <span style={{fontWeight: 500}}>{cat}</span>
+            <div style={{display: 'flex', flexDirection: 'column'}}>
+              <span style={{fontWeight: 500}}>{cat}</span>
+              <label className="switch-wrapper muted" style={{fontSize: '0.8rem', marginTop: '6px'}}>
+                <div className="switch">
+                  <input 
+                    type="checkbox" 
+                    checked={portfolio.debtCategories?.includes(cat) || false} 
+                    onChange={(e) => toggleDebtCategory(cat, e.target.checked)}
+                  />
+                  <span className="slider"></span>
+                </div>
+                Is Debt / Leverage
+              </label>
+            </div>
             <div className="flex-center" style={{gap: '4px'}}>
               <button className="btn-icon" onClick={() => renameCategory(cat)} title="Rename">
                 <Pencil size={16} />
@@ -125,6 +184,76 @@ export default function SettingsView() {
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="card" style={{marginTop: '32px'}}>
+        <h3 style={{marginBottom: '16px'}}>Target Asset Allocation</h3>
+        <p className="muted" style={{fontSize: '0.85rem', marginBottom: '16px'}}>
+          Define your ideal portfolio repartition. The total should ideally be 100%.
+        </p>
+        <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
+          {portfolio.customCategories.map(cat => {
+            const currentTarget = localTargets[cat] || 0;
+            return (
+              <div key={`target-${cat}`} className="flex-between">
+                <span style={{fontSize: '0.9rem'}}>{cat}</span>
+                <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+                  <input 
+                    type="number" 
+                    min="0" 
+                    max="100" 
+                    value={currentTarget}
+                    onChange={(e) => {
+                      const val = parseFloat(e.target.value) || 0;
+                      setLocalTargets(prev => ({ ...prev, [cat]: val }));
+                      setHasUnsavedTargets(true);
+                    }}
+                    style={{width: '70px', padding: '6px'}}
+                  />
+                  <span className="muted" style={{fontSize: '0.9rem'}}>%</span>
+                </div>
+              </div>
+            );
+          })}
+          <div className="flex-between" style={{marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-color)'}}>
+            <strong>Total</strong>
+            <strong style={{
+              color: Object.values(localTargets).reduce((a, b) => a + b, 0) === 100 ? '#10b981' : '#ef4444'
+            }}>
+              {Object.values(localTargets).reduce((a, b) => a + b, 0)}%
+            </strong>
+          </div>
+          <div className="flex-between" style={{marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-color)'}}>
+            <strong style={{fontSize: '0.9rem'}}>Target Net Exposure</strong>
+            <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+              <input 
+                type="number" 
+                min="0" 
+                step="0.1"
+                value={localTargetNetExposure}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value) || 0;
+                  setLocalTargetNetExposure(val);
+                  setHasUnsavedTargets(true);
+                }}
+                style={{width: '70px', padding: '6px'}}
+              />
+              <span className="muted" style={{fontSize: '0.9rem'}}>x</span>
+            </div>
+          </div>
+          {hasUnsavedTargets && (
+            <button 
+              className="btn btn-primary" 
+              style={{marginTop: '16px', padding: '10px'}}
+              onClick={() => {
+                savePortfolio({ ...portfolio, targetAllocation: localTargets, targetNetExposure: localTargetNetExposure });
+                setHasUnsavedTargets(false);
+              }}
+            >
+              Save Targets
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="card" style={{marginTop: '32px', border: '1px solid #ef444433'}}>

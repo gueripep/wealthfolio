@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { X } from 'lucide-react';
 import { usePortfolio } from '../context/PortfolioContext';
 
@@ -10,22 +10,35 @@ export default function Modal({ mode, symbol, closeModal, navigate }) {
   const [txType, setTxType] = useState('BUY');
   const [txQuantity, setTxQuantity] = useState('');
   const [txPrice, setTxPrice] = useState(symbol ? (currentPrices[symbol]?.price || '') : '');
+  const existingCat = symbol ? portfolio.categories[symbol] : null;
+  const isMix = typeof existingCat === 'object' && existingCat !== null;
+
   const [txCategory, setTxCategory] = useState(
-    symbol ? (portfolio.categories[symbol] || portfolio.customCategories[0]) : portfolio.customCategories[0]
+    existingCat || portfolio.customCategories[0]
   );
 
-  const handleSearch = async (e) => {
+  const searchTimeoutRef = useRef(null);
+
+  const handleSearch = (e) => {
     const q = e.target.value;
     setSearchQuery(q);
+    
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
     if (q.length < 2) {
       setSearchResults([]);
       return;
     }
-    try {
-      const resp = await fetch(`/api/search?q=${q}`);
-      const data = await resp.json();
-      setSearchResults(data);
-    } catch(err) {}
+
+    searchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const resp = await fetch(`/api/search?q=${q}`);
+        const data = await resp.json();
+        setSearchResults(data);
+      } catch(err) {}
+    }, 300);
   };
 
   const selectAsset = async (res) => {
@@ -104,11 +117,17 @@ export default function Modal({ mode, symbol, closeModal, navigate }) {
             </div>
             <div className="input-group">
               <label className="input-label">Category</label>
-              <select value={txCategory} onChange={e => setTxCategory(e.target.value)}>
-                {portfolio.customCategories.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
+              {isMix ? (
+                <div style={{padding: '8px', background: 'var(--bg)', borderRadius: '4px', fontSize: '0.9rem', border: '1px solid var(--border)'}} className="muted">
+                  ETF Mix configured. Edit in Asset Detail.
+                </div>
+              ) : (
+                <select value={txCategory} onChange={e => setTxCategory(e.target.value)}>
+                  {portfolio.customCategories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              )}
             </div>
             <button className="btn btn-primary" style={{width: '100%'}} onClick={saveTx}>Save Transaction</button>
           </div>

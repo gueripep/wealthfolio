@@ -3,19 +3,54 @@ import { getExchangeRate } from './helpers';
 export async function calculateAnalytics(portfolio, currentPrices, exchangeRates, period, assets) {
   const symbols = assets.map(a => a.symbol);
   
-  const ratePromises = symbols.map(s => {
+  const pairsToFetch = [];
+  const localExchangeRates = { ...exchangeRates };
+  
+  symbols.forEach(s => {
     const currency = s === '$$CASH_TX' ? portfolio.baseCurrency : (currentPrices[s]?.currency || 'USD');
-    return getExchangeRate(exchangeRates, currency, portfolio.baseCurrency);
+    if (currency !== portfolio.baseCurrency) {
+      const pair = `${currency}${portfolio.baseCurrency}`;
+      if (localExchangeRates[pair] == null) {
+        pairsToFetch.push({ from: currency, to: portfolio.baseCurrency });
+      }
+    }
   });
-  await Promise.all(ratePromises);
 
-  const historyPromises = symbols.map(s => fetch(`/api/history/${s}?period=${period}`).then(r => r.json()).catch(() => []));
-  const histories = await Promise.all(historyPromises);
+  if (pairsToFetch.length > 0) {
+    try {
+      const resp = await fetch('/api/exchange_rates', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pairs: pairsToFetch })
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        Object.assign(localExchangeRates, data);
+      }
+    } catch (e) {}
+  }
 
-  const historyMap = {};
-  symbols.forEach((s, i) => {
-    historyMap[s] = Array.isArray(histories[i]) ? histories[i] : [];
+  let historyMap = {};
+  if (symbols.length > 0) {
+    try {
+      const resp = await fetch('/api/histories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbols, period })
+      });
+      if (resp.ok) {
+        historyMap = await resp.json();
+      }
+    } catch (e) {}
+  }
+  
+  symbols.forEach((s) => {
+    if (!historyMap[s] || !Array.isArray(historyMap[s])) {
+      historyMap[s] = [];
+    }
   });
+
+  const histories = symbols.map(s => historyMap[s]);
 
   let allDates = [];
   const dateSet = new Set();
@@ -60,7 +95,7 @@ export async function calculateAnalytics(portfolio, currentPrices, exchangeRates
       if (assetBalances.hasOwnProperty(tx.symbol)) {
         const currency = tx.symbol === '$$CASH_TX' ? portfolio.baseCurrency : (currentPrices[tx.symbol]?.currency || 'USD');
         const pair = `${currency}${portfolio.baseCurrency}`;
-        const rate = exchangeRates[pair] || 1.0;
+        const rate = localExchangeRates[pair] || 1.0;
 
         if (tx.type === 'BUY' || tx.type === 'DEPOSIT') {
           assetBalances[tx.symbol] += tx.quantity;
@@ -93,7 +128,7 @@ export async function calculateAnalytics(portfolio, currentPrices, exchangeRates
       if (price !== undefined) {
         const currency = symbol === '$$CASH_TX' ? portfolio.baseCurrency : (currentPrices[symbol]?.currency || 'USD');
         const pair = `${currency}${portfolio.baseCurrency}`;
-        const rate = exchangeRates[pair] || 1.0;
+        const rate = localExchangeRates[pair] || 1.0;
         const valueBase = (qty * price) * rate;
         dailyValueBase += valueBase;
         dailyUnrealizedGainBase += valueBase - (costBasis * rate);
@@ -110,7 +145,7 @@ export async function calculateAnalytics(portfolio, currentPrices, exchangeRates
 
   for (const asset of assets) {
     const priceData = currentPrices[asset.symbol] || { price: 0, currency: 'USD' };
-    const rate = exchangeRates[`${priceData.currency}${portfolio.baseCurrency}`] || 1.0;
+    const rate = localExchangeRates[`${priceData.currency}${portfolio.baseCurrency}`] || 1.0;
     currentLiveValueTotal += asset.quantity * priceData.price * rate;
     currentLiveCostTotal += asset.totalCost * rate;
   }

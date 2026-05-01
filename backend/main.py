@@ -14,6 +14,7 @@ import jwt
 from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
 import os
+import asyncio
 
 DB_PATH = "wealthfolio.db"
 
@@ -144,7 +145,7 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
 # --- Auth Endpoints ---
 
 @app.post("/api/auth/register")
-async def register(req: RegisterRequest):
+def register(req: RegisterRequest):
     email = req.email.strip().lower()
     if not email or "@" not in email:
         raise HTTPException(status_code=400, detail="Invalid email address")
@@ -167,7 +168,7 @@ async def register(req: RegisterRequest):
         conn.close()
 
 @app.post("/api/auth/login")
-async def login(req: LoginRequest):
+def login(req: LoginRequest):
     email = req.email.strip().lower()
 
     conn = get_db()
@@ -193,7 +194,7 @@ async def me(user: dict = Depends(get_current_user)):
 # --- Portfolio Endpoints ---
 
 @app.get("/api/portfolio")
-async def get_portfolio(user: dict = Depends(get_current_user)):
+def get_portfolio(user: dict = Depends(get_current_user)):
     conn = get_db()
     try:
         c = conn.cursor()
@@ -206,7 +207,7 @@ async def get_portfolio(user: dict = Depends(get_current_user)):
         conn.close()
 
 @app.put("/api/portfolio")
-async def save_portfolio(payload: PortfolioData, user: dict = Depends(get_current_user)):
+def save_portfolio(payload: PortfolioData, user: dict = Depends(get_current_user)):
     conn = get_db()
     try:
         c = conn.cursor()
@@ -223,7 +224,7 @@ async def save_portfolio(payload: PortfolioData, user: dict = Depends(get_curren
 # --- Market Data Endpoints ---
 
 @app.get("/api/quote/{ticker}")
-async def get_quote(ticker: str):
+def get_quote(ticker: str):
     ticker = ticker.upper()
     try:
         conn = sqlite3.connect(DB_PATH)
@@ -278,7 +279,7 @@ async def get_quote(ticker: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/history/{ticker}")
-async def get_history(ticker: str, period: str = "1mo"):
+def get_history(ticker: str, period: str = "1mo"):
     ticker = ticker.upper()
 
     if ticker == "$$CASH_TX":
@@ -335,7 +336,7 @@ async def get_history(ticker: str, period: str = "1mo"):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/search")
-async def search_ticker(q: str):
+def search_ticker(q: str):
     try:
         url = f"https://query2.finance.yahoo.com/v1/finance/search?q={q}"
         headers = {
@@ -358,7 +359,7 @@ async def search_ticker(q: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/exchange_rate/{from_curr}/{to_curr}")
-async def get_exchange_rate(from_curr: str, to_curr: str):
+def get_exchange_rate(from_curr: str, to_curr: str):
     from_curr = from_curr.upper()
     to_curr = to_curr.upper()
 
@@ -396,12 +397,56 @@ async def get_exchange_rate(from_curr: str, to_curr: str):
         c.execute("INSERT OR REPLACE INTO exchange_rate_cache (pair, rate, last_updated) VALUES (?, ?, ?)",
                   (pair, rate, datetime.now().isoformat()))
         conn.commit()
-        conn.close()
         return {"rate": rate, "from": from_curr, "to": to_curr, "cached": False}
     except Exception as e:
         if 'conn' in locals():
             conn.close()
         raise HTTPException(status_code=500, detail=str(e))
+
+class BatchSymbolsRequest(BaseModel):
+    symbols: list[str]
+    period: str = "1mo"
+
+class BatchPairsRequest(BaseModel):
+    pairs: list[dict] # [{"from": "USD", "to": "EUR"}]
+
+@app.post("/api/quotes")
+async def get_quotes_batch(req: BatchSymbolsRequest):
+    results = {}
+    async def fetch(ticker):
+        try:
+            results[ticker] = await asyncio.to_thread(get_quote, ticker)
+        except Exception:
+            pass
+    await asyncio.gather(*(fetch(t) for t in req.symbols))
+    return results
+
+@app.post("/api/histories")
+async def get_histories_batch(req: BatchSymbolsRequest):
+    results = {}
+    async def fetch(ticker):
+        try:
+            results[ticker] = await asyncio.to_thread(get_history, ticker, req.period)
+        except Exception:
+            results[ticker] = []
+    await asyncio.gather(*(fetch(t) for t in req.symbols))
+    return results
+
+@app.post("/api/exchange_rates")
+async def get_exchange_rates_batch(req: BatchPairsRequest):
+    results = {}
+    async def fetch(pair):
+        from_curr = pair.get("from")
+        to_curr = pair.get("to")
+        if not from_curr or not to_curr:
+            return
+        try:
+            data = await asyncio.to_thread(get_exchange_rate, from_curr, to_curr)
+            results[f"{from_curr}{to_curr}"] = data.get("rate", 1.0)
+        except Exception:
+            results[f"{from_curr}{to_curr}"] = 1.0
+    await asyncio.gather(*(fetch(p) for p in req.pairs))
+    return results
 
 if __name__ == "__main__":
     import uvicorn

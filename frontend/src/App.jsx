@@ -82,14 +82,19 @@ export default function App() {
       ...Object.keys(port.categories || {})
     ])];
     
-    for (const symbol of symbols) {
-      try {
-        const resp = await fetch(`/api/quote/${symbol}`);
-        if (!resp.ok) continue;
+    if (symbols.length === 0) return;
+
+    try {
+      const resp = await fetch('/api/quotes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbols })
+      });
+      if (resp.ok) {
         const data = await resp.json();
-        setCurrentPrices(prev => ({ ...prev, [symbol]: data }));
-      } catch (e) {}
-    }
+        setCurrentPrices(prev => ({ ...prev, ...data }));
+      }
+    } catch (e) {}
   };
 
   const navigate = (view, asset = null) => {
