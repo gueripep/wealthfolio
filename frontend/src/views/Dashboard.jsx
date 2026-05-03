@@ -67,16 +67,16 @@ export default function Dashboard({ navigate, openModal }) {
       const periodGainPct = startValueBase > 0 ? (periodGainBase / startValueBase) * 100 : 0;
 
       renderedAssetList.push(
-        <div key={asset.symbol} className="card" style={{cursor: 'pointer'}} onClick={() => navigate('assetDetail', asset.symbol)}>
+        <div key={asset.symbol} className="card" style={{ cursor: 'pointer' }} onClick={() => navigate('assetDetail', asset.symbol)}>
           <div className="flex-between">
             <div>
-              <div style={{fontWeight: 600}}>{asset.symbol}</div>
+              <div style={{ fontWeight: 600 }}>{asset.symbol}</div>
               <div className="muted">{typeof asset.category === 'string' ? asset.category : 'ETF Mix'} • {asset.quantity.toFixed(2)} units</div>
             </div>
-            <div style={{textAlign: 'right'}}>
-              <div style={{fontWeight: 700}}>{formatCurrency(valueBase, portfolio.baseCurrency)}</div>
-              <div className="muted" style={{fontSize: '0.75rem'}}>{formatCurrency(priceData.price, priceData.currency)}</div>
-              <div className={periodGainBase >= 0 ? 'gain' : 'loss'} style={{fontSize: '0.8rem'}}>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontWeight: 700 }}>{formatCurrency(valueBase, portfolio.baseCurrency)}</div>
+              <div className="muted" style={{ fontSize: '0.75rem' }}>{formatCurrency(priceData.price, priceData.currency)}</div>
+              <div className={periodGainBase >= 0 ? 'gain' : 'loss'} style={{ fontSize: '0.8rem' }}>
                 {periodGainBase >= 0 ? '+' : ''}{formatCurrency(periodGainBase, portfolio.baseCurrency)} ({periodGainPct.toFixed(2)}%)
               </div>
             </div>
@@ -99,7 +99,7 @@ export default function Dashboard({ navigate, openModal }) {
       } else {
         mix = { 'Other': 1.0 };
       }
-      
+
       Object.entries(mix).forEach(([catName, weight]) => {
         if (!catSummary[catName]) {
           catSummary[catName] = { name: catName, value: 0, assetsCount: 0, assetSymbols: [] };
@@ -120,7 +120,7 @@ export default function Dashboard({ navigate, openModal }) {
         const startPrice = analytics?.periodStartPrices?.[symbol] || (currentPrices[symbol]?.price || 0);
         const priceData = currentPrices[symbol] || { currency: 'USD' };
         const rate = exchangeRates[`${priceData.currency}${portfolio.baseCurrency}`] || 1.0;
-        
+
         const assetCategory = portfolio.categories[symbol];
         let weight = 0;
         if (typeof assetCategory === 'object' && assetCategory !== null) {
@@ -139,12 +139,12 @@ export default function Dashboard({ navigate, openModal }) {
         <div key={cat.name} className="card">
           <div className="flex-between">
             <div>
-              <div style={{fontWeight: 600}}>{cat.name}</div>
+              <div style={{ fontWeight: 600 }}>{cat.name}</div>
               <div className="muted">{cat.assetsCount} assets: {cat.assetSymbols.join(', ')}</div>
             </div>
-            <div style={{textAlign: 'right'}}>
-              <div style={{fontWeight: 700}}>{formatCurrency(cat.value, portfolio.baseCurrency)}</div>
-              <div className={periodGainBase >= 0 ? 'gain' : 'loss'} style={{fontSize: '0.8rem'}}>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontWeight: 700 }}>{formatCurrency(cat.value, portfolio.baseCurrency)}</div>
+              <div className={periodGainBase >= 0 ? 'gain' : 'loss'} style={{ fontSize: '0.8rem' }}>
                 {periodGainBase >= 0 ? '+' : ''}{formatCurrency(periodGainBase, portfolio.baseCurrency)} ({periodGainPct.toFixed(2)}%)
               </div>
             </div>
@@ -176,14 +176,14 @@ export default function Dashboard({ navigate, openModal }) {
   const pct = (diff / startValue) * 100;
 
   return (
-    <main id="main-content" style={{paddingBottom: '100px'}}>
+    <main id="main-content" style={{ paddingBottom: '100px' }}>
       {/* Summary Card */}
       <div className="card">
         <div className="flex-between">
           <span className="muted">Total Portfolio Value</span>
           <span className={`indicator ${pct >= 0 ? 'gain' : 'loss'}`}>{pct >= 0 ? '+' : ''}{pct.toFixed(2)}%</span>
         </div>
-        <div style={{fontSize: '2.5rem', fontWeight: 700, margin: '8px 0'}}>
+        <div style={{ fontSize: '2.5rem', fontWeight: 700, margin: '8px 0' }}>
           {formatCurrency(totalValueBase, portfolio.baseCurrency)}
         </div>
         <div className="flex-between">
@@ -194,7 +194,7 @@ export default function Dashboard({ navigate, openModal }) {
 
       {/* Charts Section */}
       <div className="card">
-        <div className="segmented-control" style={{marginBottom: '24px', fontSize: '0.75rem'}}>
+        <div className="segmented-control" style={{ marginBottom: '24px', fontSize: '0.75rem' }}>
           {['2d', '5d', '1mo', '1y', 'max'].map(p => (
             <div key={p} className={`segment-item ${selectedPeriod === p ? 'active' : ''}`} onClick={() => setSelectedPeriod(p)}>
               {p.toUpperCase()}
@@ -202,20 +202,20 @@ export default function Dashboard({ navigate, openModal }) {
           ))}
         </div>
 
-        <div className="flex-between" style={{marginBottom: '12px'}}>
-          <h3 style={{marginBottom: 0, fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em'}} className="muted">Performance</h3>
-          <div className={diff >= 0 ? 'gain' : 'loss'} style={{fontWeight: 600}}>
+        <div className="flex-between" style={{ marginBottom: '12px' }}>
+          <h3 style={{ marginBottom: 0, fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }} className="muted">Performance</h3>
+          <div className={diff >= 0 ? 'gain' : 'loss'} style={{ fontWeight: 600 }}>
             {diff >= 0 ? '+' : ''}{formatCurrency(diff, portfolio.baseCurrency)} ({pct >= 0 ? '+' : ''}{pct.toFixed(2)}%)
           </div>
         </div>
-        <div style={{position: 'relative', height: '180px', marginBottom: '32px'}}>
+        <div style={{ position: 'relative', height: '180px', marginBottom: '32px' }}>
           {loading && (
-            <div className="flex-center" style={{position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(22, 24, 33, 0.7)', borderRadius: '8px', zIndex: 5}}>
+            <div className="flex-center" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(22, 24, 33, 0.7)', borderRadius: '8px', zIndex: 5 }}>
               <div className="spinner"></div>
             </div>
           )}
           {analytics && (
-            <Line 
+            <Line
               data={{
                 labels: analytics.allDates.map(d => new Date(d).toLocaleDateString()),
                 datasets: [
@@ -224,7 +224,7 @@ export default function Dashboard({ navigate, openModal }) {
                     data: analytics.relativeGains,
                     borderColor: (context) => {
                       const chart = context.chart;
-                      const {ctx, chartArea} = chart;
+                      const { ctx, chartArea } = chart;
                       if (!chartArea) return '#10b981';
                       return getGradient(ctx, chartArea, chart.scales);
                     },
@@ -253,12 +253,12 @@ export default function Dashboard({ navigate, openModal }) {
           )}
         </div>
 
-        <div className="flex-between" style={{marginBottom: '12px'}}>
-          <h3 style={{marginBottom: 0, fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em'}} className="muted">Value Evolution</h3>
+        <div className="flex-between" style={{ marginBottom: '12px' }}>
+          <h3 style={{ marginBottom: 0, fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }} className="muted">Value Evolution</h3>
         </div>
-        <div style={{height: '180px', position: 'relative'}}>
+        <div style={{ height: '180px', position: 'relative' }}>
           {analytics && (
-            <Line 
+            <Line
               data={{
                 labels: analytics.allDates.map(d => new Date(d).toLocaleDateString()),
                 datasets: [{
@@ -282,7 +282,7 @@ export default function Dashboard({ navigate, openModal }) {
       <div>
         <div className="dashboard-header">
           <h3>Your Assets</h3>
-          <button className="btn btn-primary" onClick={() => openModal('asset')} style={{padding: '8px 16px', fontSize: '0.8rem'}}>
+          <button className="btn btn-primary" onClick={() => openModal('asset')} style={{ padding: '8px 16px', fontSize: '0.8rem' }}>
             <Plus size={14} />
             <span>Add Asset</span>
           </button>

@@ -39,11 +39,6 @@ export default function SettingsView() {
     savePortfolio({ ...portfolio, debtCategories: newDebts });
   };
 
-  const toggleUnleveragedCategory = (cat, isUnleveraged) => {
-    const unlevs = portfolio.unleveragedCategories || [];
-    const newUnlevs = isUnleveraged ? [...unlevs, cat] : unlevs.filter(c => c !== cat);
-    savePortfolio({ ...portfolio, unleveragedCategories: newUnlevs });
-  };
 
   const renameCategory = (oldName) => {
     const newName = window.prompt(`Enter new name for "${oldName}":`, oldName);
@@ -178,17 +173,6 @@ export default function SettingsView() {
                   <span className="slider"></span>
                 </div>
                 Is Debt
-              </label>
-              <label className="switch-wrapper muted" style={{ fontSize: '0.8rem', marginTop: '6px' }}>
-                <div className="switch">
-                  <input
-                    type="checkbox"
-                    checked={portfolio.unleveragedCategories?.includes(cat) || false}
-                    onChange={(e) => toggleUnleveragedCategory(cat, e.target.checked)}
-                  />
-                  <span className="slider"></span>
-                </div>
-                Limit to 1x Exposure
               </label>
             </div>
             <div className="flex-center" style={{ gap: '4px' }}>

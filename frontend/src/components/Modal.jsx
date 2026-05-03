@@ -3,7 +3,7 @@ import { X } from 'lucide-react';
 import { usePortfolio } from '../context/PortfolioContext';
 
 export default function Modal({ mode, symbol, closeModal, navigate }) {
-  const { portfolio, savePortfolio, currentPrices, setCurrentPrices } = usePortfolio();
+  const { portfolio, savePortfolio, currentPrices, setCurrentPrices, addTransaction } = usePortfolio();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   
@@ -59,18 +59,7 @@ export default function Modal({ mode, symbol, closeModal, navigate }) {
   };
 
   const saveTx = () => {
-    const tx = {
-      symbol: symbol,
-      type: txType,
-      quantity: parseFloat(txQuantity),
-      price: parseFloat(txPrice),
-      date: new Date().toISOString()
-    };
-    savePortfolio({
-      ...portfolio,
-      transactions: [...portfolio.transactions, tx],
-      categories: { ...portfolio.categories, [symbol]: txCategory }
-    });
+    addTransaction(symbol, txType, txQuantity, txPrice, txCategory);
     closeModal();
   };
 

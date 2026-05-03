@@ -39,9 +39,24 @@ export const PortfolioProvider = ({ children }) => {
     setExchangeRates({ 'USDUSD': 1.0 });
   };
 
+  const ensureIds = (p) => {
+    if (!p || !p.transactions) return p;
+    const generateId = () => (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 11);
+    let modified = false;
+    const newTxs = p.transactions.map(t => {
+      if (!t.id) {
+        modified = true;
+        return { ...t, id: generateId() };
+      }
+      return t;
+    });
+    return modified ? { ...p, transactions: newTxs } : p;
+  };
+
   const savePortfolio = async (newPortfolio) => {
-    setPortfolio(newPortfolio);
-    localStorage.setItem('wealthfolio_portfolio', JSON.stringify(newPortfolio));
+    const portfolioWithIds = ensureIds(newPortfolio);
+    setPortfolio(portfolioWithIds);
+    localStorage.setItem('wealthfolio_portfolio', JSON.stringify(portfolioWithIds));
     
     if (authToken) {
       try {
@@ -51,12 +66,35 @@ export const PortfolioProvider = ({ children }) => {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${authToken}`
           },
-          body: JSON.stringify({ data: newPortfolio })
+          body: JSON.stringify({ data: portfolioWithIds })
         });
       } catch (err) {
         console.error('Failed to sync portfolio to backend', err);
       }
     }
+  };
+
+  const deleteTransaction = (txId) => {
+    if (window.confirm('Are you sure you want to delete this transaction?')) {
+      const newTxs = portfolio.transactions.filter(t => t.id !== txId);
+      savePortfolio({ ...portfolio, transactions: newTxs });
+    }
+  };
+
+  const addTransaction = (symbol, txType, txQuantity, txPrice, txCategory) => {
+    const tx = {
+      id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 11),
+      symbol: symbol,
+      type: txType,
+      quantity: parseFloat(txQuantity),
+      price: parseFloat(txPrice),
+      date: new Date().toISOString()
+    };
+    savePortfolio({
+      ...portfolio,
+      transactions: [...portfolio.transactions, tx],
+      categories: { ...portfolio.categories, [symbol]: txCategory }
+    });
   };
 
   return (
@@ -67,6 +105,8 @@ export const PortfolioProvider = ({ children }) => {
       currentPrices, setCurrentPrices,
       exchangeRates, setExchangeRates,
       savePortfolio,
+      deleteTransaction,
+      addTransaction,
       logout
     }}>
       {children}

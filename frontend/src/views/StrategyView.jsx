@@ -133,7 +133,6 @@ export default function StrategyView() {
     // 1. Map categories to their best available leverage
     let nonDebtTargetPctSum = 0;
     Object.entries(portfolio.targetAllocation).forEach(([cat, targetPct]) => {
-      const isUnleveraged = portfolio.unleveragedCategories?.includes(cat);
       const isDebt = portfolio.debtCategories?.includes(cat);
       const instrument = useMargin 
         ? (best1xPerCat[cat] || { symbol: '?', weight: 1.0 })
@@ -141,7 +140,7 @@ export default function StrategyView() {
       
       catConfigs[cat] = {
         weight: targetPct / 100,
-        leverage: (isUnleveraged || useMargin) ? 1.0 : instrument.weight,
+        leverage: useMargin ? 1.0 : instrument.weight,
         symbol: instrument.symbol,
         ter: instrument.ter,
         benchmarkTer: cheapestPerCat[cat]?.ter || 0.10,
@@ -229,8 +228,81 @@ export default function StrategyView() {
     finalTargetExposure = finalNetWorth * targetRatio;
   }
 
+  const nextBuy = buyPlan
+    .filter(i => i.type === 'BUY' && i.isPossible)
+    .sort((a, b) => b.amount - a.amount)[0];
+
   return (
     <main id="main-content" style={{paddingBottom: '100px'}}>
+      {nextBuy && (
+        <div className="card" style={{
+          background: 'linear-gradient(135deg, rgba(16, 185, 129, 0.08) 0%, rgba(99, 102, 241, 0.08) 100%)',
+          border: '1px solid rgba(16, 185, 129, 0.2)',
+          padding: '28px',
+          marginBottom: '24px',
+          position: 'relative',
+          overflow: 'hidden',
+          boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.2)'
+        }}>
+          <div style={{
+            position: 'absolute',
+            top: '-15px',
+            right: '-15px',
+            fontSize: '6rem',
+            opacity: 0.03,
+            fontWeight: 900,
+            pointerEvents: 'none',
+            color: '#10b981',
+            transform: 'rotate(-5deg)'
+          }}>DCA</div>
+          
+          <div className="flex-between" style={{marginBottom: '20px'}}>
+            <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+              <div style={{
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                backgroundColor: '#10b981',
+                boxShadow: '0 0 10px #10b981'
+              }}></div>
+              <div className="muted" style={{fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.2em', color: '#10b981', fontWeight: 800}}>Next DCA Priority</div>
+            </div>
+            <div style={{fontSize: '0.7rem', color: 'var(--text-muted)', background: 'rgba(255,255,255,0.05)', padding: '4px 10px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)'}}>
+              BASED ON LARGEST EXPOSURE GAP
+            </div>
+          </div>
+
+          <div className="flex-between" style={{alignItems: 'flex-start'}}>
+            <div>
+              <h2 style={{margin: 0, fontSize: '2.5rem', fontWeight: 900, letterSpacing: '-0.04em', color: 'var(--text-main)', lineHeight: 1}}>
+                {nextBuy.instrument}
+              </h2>
+              <div style={{fontSize: '1.1rem', marginTop: '12px', color: 'var(--text-muted)'}}>
+                In category: <strong style={{color: '#818cf8', fontWeight: 700}}>{nextBuy.category}</strong>
+              </div>
+              <p style={{margin: '16px 0 0 0', fontSize: '0.85rem', color: 'var(--text-muted)', maxWidth: '400px', lineHeight: 1.5}}>
+                Focus your next contribution here. This asset is currently the most under-allocated relative to your target strategy.
+              </p>
+            </div>
+          </div>
+          
+          <div style={{marginTop: '24px', display: 'flex', gap: '24px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '20px'}}>
+             <div style={{display: 'flex', flexDirection: 'column', gap: '4px'}}>
+               <span style={{fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Leverage</span>
+               <strong style={{fontSize: '0.95rem', color: 'var(--text-main)'}}>{nextBuy.weight}x</strong>
+             </div>
+             <div style={{display: 'flex', flexDirection: 'column', gap: '4px'}}>
+               <span style={{fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Target Weight</span>
+               <strong style={{fontSize: '0.95rem', color: 'var(--text-main)'}}>{(portfolio.targetAllocation[nextBuy.category] || 0).toFixed(1)}%</strong>
+             </div>
+             <div style={{display: 'flex', flexDirection: 'column', gap: '4px', marginLeft: 'auto', textAlign: 'right'}}>
+               <span style={{fontSize: '0.65rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>Total Gap</span>
+               <strong style={{fontSize: '0.95rem', color: 'var(--text-main)'}}>{formatCurrency(nextBuy.amount, portfolio.baseCurrency)}</strong>
+             </div>
+          </div>
+        </div>
+      )}
+
       <div className="card">
         <div className="flex-between" style={{marginBottom: '16px'}}>
           <h3 style={{marginBottom: 0}}>Asset Repartition</h3>
@@ -377,16 +449,16 @@ export default function StrategyView() {
                                     <span>Swap Spread ({(item.weight - 1).toFixed(1)}x): <strong>{((item.weight - 1) * swapSpread).toFixed(2)}%</strong></span>
                                     <span>{formatCurrency(item.amount * (item.weight - 1) * (swapSpread / 100), portfolio.baseCurrency)}/yr</span>
                                   </div>
-                                  <div className="flex-between" style={{color: '#ef4444', borderTop: '1px solid rgba(239, 68, 68, 0.2)', paddingTop: '4px', marginTop: '2px'}}>
+                                  <div className="flex-between" style={{color: '#818cf8', borderTop: '1px solid rgba(129, 140, 248, 0.2)', paddingTop: '4px', marginTop: '2px'}}>
                                     <div style={{display: 'flex', alignItems: 'center', gap: '6px'}}>
-                                      <span>Vol Drag:</span>
+                                      <span title="The mathematical effect of compounding. This applies to ANY strategy that rebalances to a fixed leverage target.">Rebalancing Drag:</span>
                                       <input 
                                         type="number" 
                                         value={categoryVols[item.category] ?? marketVol} 
                                         onChange={e => setCategoryVols({...categoryVols, [item.category]: parseFloat(e.target.value) || 0})}
-                                        style={{width: '40px', padding: '1px 3px', fontSize: '0.65rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', borderRadius: '4px'}}
+                                        style={{width: '40px', padding: '1px 3px', fontSize: '0.65rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(129, 140, 248, 0.3)', color: '#818cf8', borderRadius: '4px'}}
                                       />
-                                      <span style={{fontSize: '0.65rem'}}>%</span>
+                                      <span style={{fontSize: '0.65rem'}}>% vol</span>
                                     </div>
                                     <div style={{textAlign: 'right'}}>
                                       <strong style={{fontSize: '0.75rem'}}>{(0.5 * (Math.pow(item.weight, 2) - item.weight) * Math.pow((categoryVols[item.category] ?? marketVol) / 100, 2) * 100).toFixed(2)}%</strong>
@@ -452,26 +524,27 @@ export default function StrategyView() {
                     </div>
 
                     <div style={{marginTop: '12px', borderTop: '1px dashed rgba(245, 158, 11, 0.2)', paddingTop: '10px'}}>
-                      <div className="flex-between" style={{fontSize: '0.65rem', color: '#f59e0b', opacity: 0.8, marginBottom: '4px'}}>
-                        <span>VS. LEVERAGED ETF ALTERNATIVE</span>
-                      </div>
-                      <div className="flex-between" style={{fontSize: '0.75rem', color: 'var(--text-muted)'}}>
-                        <span>Estimated LETF Drag:</span>
-                        <span>~ {formatCurrency(
-                          buyPlan.reduce((a, b) => {
-                            const targetExposure = b.amount; // In margin mode, amount is 1x value
-                            // Heuristic: If we used a 3x ETF instead for this amount
-                            const levered = targetExposure * (2/3); 
-                            const volDrag = targetExposure * 0.5 * (Math.pow(3, 2) - 3) * Math.pow(marketVol / 100, 2);
-                            const swapDrag = targetExposure * (2/3) * (swapSpread / 100);
-                            const terDrag = targetExposure * 0.95 / 100;
-                            return a + volDrag + swapDrag + terDrag;
-                          }, 0), 
-                          portfolio.baseCurrency
-                        )}/yr</span>
-                      </div>
-                    </div>
-                  </div>
+                       <div className="flex-between" style={{fontSize: '0.75rem', color: 'var(--text-muted)'}}>
+                         <span>LETF Strategy Cost:</span>
+                         <span>~ {formatCurrency(
+                           buyPlan.reduce((a, b) => {
+                             const targetExposure = b.amount;
+                             const valueInLETF = targetExposure / 3;
+                             const leverageDebt = targetExposure * (2/3);
+                             const volDrag = valueInLETF * 0.5 * (Math.pow(3, 2) - 3) * Math.pow(marketVol / 100, 2);
+                             const swapDrag = leverageDebt * (swapSpread / 100);
+                             const terDrag = valueInLETF * 0.95 / 100;
+                             const internalInterest = leverageDebt * (fedRate / 100);
+                             return a + volDrag + swapDrag + terDrag + internalInterest;
+                           }, 0), 
+                           portfolio.baseCurrency
+                         )}/yr</span>
+                       </div>
+                       <div style={{fontSize: '0.6rem', color: '#10b981', marginTop: '2px'}}>
+                         * Includes institutional rates ({fedRate}% + {swapSpread}%) + Rebalancing Drag.
+                       </div>
+                     </div>
+                   </div>
                 ) : (
                   <div style={{margin: 0, fontSize: '0.75rem', color: '#f59e0b', display: 'flex', gap: '8px'}}>
                     <span>💡</span>
@@ -492,23 +565,19 @@ export default function StrategyView() {
                                 </div>
                               </div>
                                 <div className="flex-between" style={{opacity: 1, marginTop: '8px'}}>
-                                  <span>Total Est. Drag (TER + Borrow + Swap + Vol):</span>
+                                  <div style={{display: 'flex', flexDirection: 'column'}}>
+                                    <span style={{fontSize: '0.8rem'}}>Total Expected Holding Cost:</span>
+                                    <span style={{fontSize: '0.6rem', color: 'var(--text-muted)'}}>Fixed Fees + Expected Rebalancing Drag</span>
+                                  </div>
                                   <strong style={{color: '#f59e0b', fontSize: '1.1rem'}}>
                                     {formatCurrency(
                                       Object.entries(portfolio.targetAllocation).reduce((total, [cat, targetPct]) => {
                                         const config = catConfigs[cat] || { weight: targetPct/100, leverage: 1.0, ter: 0, benchmarkTer: 0 };
                                         const normalizedWeight = (config.weight * normalizationFactor);
-                                        const targetExposure = finalTargetExposure * normalizedWeight;
-                                        
                                         const T = targetRatio;
                                         const L = config.leverage;
                                         const catVol = categoryVols[cat] ?? marketVol;
-                                        
-                                        // The "Efficient Mix": 
-                                        // w of leverage L, (1-w) of leverage 1.0 to reach target T.
-                                        // w*L + (1-w) = T => w(L-1) = T-1 => w = (T-1)/(L-1)
                                         const w = L > 1 ? Math.min(1, Math.max(0, (T - 1) / (L - 1))) : 0;
-                                        
                                         const assetValue = finalNetWorth * normalizedWeight;
                                         const valueInLETF = assetValue * w;
                                         const valueInCore = assetValue * (1 - w);
@@ -533,18 +602,30 @@ export default function StrategyView() {
                                 <div style={{marginTop: '12px', borderTop: '1px dashed rgba(245, 158, 11, 0.2)', paddingTop: '10px'}}>
                                   <div className="flex-between" style={{fontSize: '0.65rem', color: '#f59e0b', opacity: 0.8, marginBottom: '4px'}}>
                                     <span>VS. MARGIN ALTERNATIVE</span>
+                                    <div style={{display: 'flex', alignItems: 'center', gap: '6px'}}>
+                                      <span>Margin Rate:</span>
+                                      <input 
+                                        type="number" 
+                                        value={platformRate} 
+                                        onChange={e => setPlatformRate(parseFloat(e.target.value) || 0)} 
+                                        step="0.1" 
+                                        style={{width: '45px', padding: '1px 4px', fontSize: '0.65rem', background: 'rgba(0,0,0,0.3)', border: '1px solid rgba(245, 158, 11, 0.3)', color: '#f59e0b', borderRadius: '4px'}} 
+                                      />
+                                      <span>%</span>
+                                    </div>
                                   </div>
-                                  <div className="flex-between" style={{fontSize: '0.75rem', color: 'var(--text-muted)'}}>
-                                    <span>Platform Margin Cost:</span>
-                                    <span>{formatCurrency(
-                                      (finalTargetExposure - finalNetWorth) * (platformRate / 100) + 
-                                      (finalTargetExposure * 0.07 / 100), // Assume ~0.07% avg TER for 1x assets
-                                      portfolio.baseCurrency
-                                    )}/yr</span>
-                                  </div>
-                                  <div style={{fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '2px'}}>
-                                    * Assumes 1x core assets + borrowing at {platformRate}%.
-                                  </div>
+                                   <div className="flex-between" style={{fontSize: '0.75rem', color: 'var(--text-muted)'}}>
+                                     <span>Margin Strategy Cost:</span>
+                                     <span>{formatCurrency(
+                                       (finalTargetExposure - finalNetWorth) * (platformRate / 100) + 
+                                       (finalTargetExposure * 0.07 / 100) + 
+                                       (finalNetWorth * 0.5 * (Math.pow(targetRatio, 2) - targetRatio) * Math.pow(marketVol / 100, 2)),
+                                       portfolio.baseCurrency
+                                     )}/yr</span>
+                                   </div>
+                                   <div style={{fontSize: '0.6rem', color: 'var(--text-muted)', marginTop: '2px'}}>
+                                     * Includes platform interest ({platformRate}%) + same Rebalancing Drag.
+                                   </div>
                                 </div>
                               <button 
                                 onClick={() => setShowCostHelp(!showCostHelp)} 
@@ -568,10 +649,9 @@ export default function StrategyView() {
                                 <div style={{marginTop: '12px', padding: '12px', background: 'rgba(0, 0, 0, 0.2)', borderRadius: '8px', fontSize: '0.7rem', border: '1px solid rgba(245, 158, 11, 0.2)', color: '#f59e0b'}}>
                                   <div style={{marginBottom: '8px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em'}}>Variable Guidance</div>
                                   <div style={{display: 'flex', flexDirection: 'column', gap: '8px'}}>
-                                    <div><strong>Interest (Fed):</strong> The rate inside the ETF (e.g. Fed Funds/SOFR). Usually ~5.3%.</div>
-                                    <div><strong>Platform Rate:</strong> What your broker charges you for margin (e.g. 6.5%+).</div>
-                                    <div><strong>Volatility (Vol):</strong> Use the volatility of the <strong>1x underlying index</strong> (not the ETF's). Historical avg is ~16% for S&P 500 and ~23% for Nasdaq. High vol increases decay.</div>
-                                    <div><strong>Swap Spread:</strong> The fee banks charge ETF managers. Usually between 0.4% and 0.8%. 0.5% is a safe default.</div>
+                                    <div><strong>Interest (Fed):</strong> Institutional rate inside ETFs. Usually ~5.3%.</div>
+                                    <div><strong>Rebalancing Drag:</strong> The cost of maintaining a fixed leverage ratio. This applies to <strong>BOTH</strong> LETFs and Margin strategies if you rebalance. In trending markets, this can turn into a "Boost."</div>
+                                    <div style={{marginTop: '4px', opacity: 0.8, fontStyle: 'italic'}}>Note: LETFs are often cheaper than retail margin because their internal rate (Fed Rate + Spread) is significantly lower than typical broker margin rates.</div>
                                   </div>
                                 </div>
                               )}

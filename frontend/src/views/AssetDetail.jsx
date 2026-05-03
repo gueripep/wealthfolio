@@ -4,7 +4,7 @@ import { usePortfolio } from '../context/PortfolioContext';
 import { getAssetSummary, formatCurrency } from '../utils/helpers';
 
 export default function AssetDetail({ symbol, navigate, openModal }) {
-  const { portfolio, currentPrices, savePortfolio } = usePortfolio();
+  const { portfolio, currentPrices, savePortfolio, deleteTransaction } = usePortfolio();
 
   const asset = getAssetSummary(portfolio, currentPrices, symbol);
   
@@ -190,13 +190,31 @@ export default function AssetDetail({ symbol, navigate, openModal }) {
       </div>
 
       <div className="card">
-        <h3 style={{marginBottom: '12px'}}>Transaction History</h3>
+        <div className="flex-between" style={{marginBottom: '12px'}}>
+          <h3 style={{marginBottom: 0}}>Transaction History</h3>
+          <button className="btn btn-secondary" onClick={() => openModal('transaction', symbol)} style={{padding: '4px 8px', fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '4px'}}>
+            <Plus size={14} />
+            <span>Add Tx</span>
+          </button>
+        </div>
         <div>
-          {asset.transactions.map((t, i) => (
-            <div key={i} style={{padding: '8px 0', borderBottom: '1px solid var(--border)'}} className="flex-between">
-              <div>
-                <div style={{fontWeight: 500}}>{t.type}</div>
-                <div className="muted">{new Date(t.date).toLocaleDateString()}</div>
+          {[...asset.transactions]
+            .sort((a, b) => new Date(b.date) - new Date(a.date))
+            .map((t, i) => (
+            <div key={t.id || i} style={{padding: '12px 0', borderBottom: '1px solid var(--border)'}} className="flex-between">
+              <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
+                <button 
+                  className="btn-icon" 
+                  onClick={() => deleteTransaction(t.id)}
+                  style={{color: 'var(--error)', background: 'transparent', border: 'none', cursor: 'pointer', padding: '4px'}}
+                  title="Delete Transaction"
+                >
+                  <Trash2 size={14} />
+                </button>
+                <div>
+                  <div style={{fontWeight: 500}}>{t.type}</div>
+                  <div className="muted">{new Date(t.date).toLocaleDateString()}</div>
+                </div>
               </div>
               <div style={{textAlign: 'right'}}>
                 <div>{t.quantity} @ {formatCurrency(t.price, priceData.currency)}</div>

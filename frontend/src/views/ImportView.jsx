@@ -38,6 +38,7 @@ export default function ImportView() {
             if (!symbol) return;
             const tradeDateRaw = row['Trade Date'] || row['Date'];
             const tx = {
+              id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).substring(2, 11),
               symbol: symbol,
               type: type,
               quantity: Math.abs(parseFloat(row['Quantity'])) || 0,
