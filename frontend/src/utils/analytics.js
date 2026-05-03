@@ -39,13 +39,33 @@ export async function calculateAnalytics(
     } catch (e) {}
   }
 
+  // 1. Batch S&P 500 with other symbols to save a network round trip
+  const fetchSymbols = [...symbols];
+  if (!fetchSymbols.includes("^GSPC")) {
+    fetchSymbols.push("^GSPC");
+  }
+
+  // Calculate earliest transaction date for "max" view to avoid fetching 40 years of useless data
+  let start_date = null;
+  if (period === "max" && portfolio.transactions && portfolio.transactions.length > 0) {
+    const txDates = portfolio.transactions.map((t) => new Date(t.date).getTime());
+    const minDate = new Date(Math.min(...txDates));
+    // Buffer by 7 days to ensure we have a starting price for the calculation
+    minDate.setDate(minDate.getDate() - 7);
+    start_date = minDate.toISOString().split("T")[0];
+  }
+
   let historyMap = {};
-  if (symbols.length > 0) {
+  if (fetchSymbols.length > 0) {
     try {
       const resp = await fetch("/api/histories", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbols, period }),
+        body: JSON.stringify({
+          symbols: fetchSymbols,
+          period: start_date ? undefined : period,
+          start: start_date,
+        }),
       });
       if (resp.ok) {
         historyMap = await resp.json();
@@ -53,10 +73,21 @@ export async function calculateAnalytics(
     } catch (e) {}
   }
 
-  symbols.forEach((s) => {
+  // Ensure every symbol has an array
+  fetchSymbols.forEach((s) => {
     if (!historyMap[s] || !Array.isArray(historyMap[s])) {
       historyMap[s] = [];
     }
+  });
+
+  // 2. CRITICAL: Pre-index history data by date for O(1) lookup
+  // This replaces the O(N) .find() inside the double loop (Days * Symbols)
+  const indexedHistory = {};
+  fetchSymbols.forEach((s) => {
+    indexedHistory[s] = {};
+    historyMap[s].forEach((entry) => {
+      indexedHistory[s][entry.date] = entry;
+    });
   });
 
   const histories = symbols.map((s) => historyMap[s]);
@@ -136,7 +167,8 @@ export async function calculateAnalytics(
       if (symbol === "$$CASH_TX") {
         lastKnownPrices[symbol] = 1.0;
       } else {
-        const dayData = historyMap[symbol].find((d) => d.date === dateStr);
+        // Optimized O(1) lookup using our indexed object
+        const dayData = indexedHistory[symbol][dateStr];
         if (dayData) lastKnownPrices[symbol] = dayData.close;
       }
 
@@ -203,33 +235,28 @@ export async function calculateAnalytics(
   const relativeGains = portfolioGains.map((g) => g - startPoint);
 
   let sp500RelativeGains = [];
-  try {
-    const spResp = await fetch(`/api/history/%5EGSPC?period=${period}`);
-    const spHistory = spResp.ok ? await spResp.json() : [];
-    if (Array.isArray(spHistory) && spHistory.length > 0) {
-      const spSorted = spHistory
-        .slice()
-        .sort((a, b) => (a.date < b.date ? -1 : 1));
-      const portfolioBase = portfolioValues[0] || 1;
-      let spBase = null;
-      sp500RelativeGains = allDates.map((dateStr) => {
-        let lo = 0,
-          hi = spSorted.length - 1,
-          found = null;
-        while (lo <= hi) {
-          const mid = (lo + hi) >> 1;
-          if (spSorted[mid].date <= dateStr) {
-            found = mid;
-            lo = mid + 1;
-          } else hi = mid - 1;
-        }
-        if (found === null) return null;
-        const spClose = spSorted[found].close;
-        if (spBase === null) spBase = spClose;
-        return (spClose / spBase - 1) * portfolioBase;
-      });
-    }
-  } catch (_) {}
+  const spHistory = historyMap["^GSPC"] || [];
+  if (Array.isArray(spHistory) && spHistory.length > 0) {
+    const spSorted = spHistory.slice().sort((a, b) => (a.date < b.date ? -1 : 1));
+    const portfolioBase = portfolioValues[0] || 1;
+    let spBase = null;
+    sp500RelativeGains = allDates.map((dateStr) => {
+      let lo = 0,
+        hi = spSorted.length - 1,
+        found = null;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if (spSorted[mid].date <= dateStr) {
+          found = mid;
+          lo = mid + 1;
+        } else hi = mid - 1;
+      }
+      if (found === null) return null;
+      const spClose = spSorted[found].close;
+      if (spBase === null) spBase = spClose;
+      return (spClose / spBase - 1) * portfolioBase;
+    });
+  }
 
   return {
     allDates,

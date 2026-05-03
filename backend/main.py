@@ -297,7 +297,7 @@ def get_quote(ticker: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/history/{ticker}")
-def get_history(ticker: str, period: str = "1mo"):
+def get_history(ticker: str, period: str = "1mo", start: Optional[str] = None):
     ticker = ticker.upper()
 
     if ticker == "$$CASH_TX":
@@ -309,7 +309,7 @@ def get_history(ticker: str, period: str = "1mo"):
     elif period == "5d":
         interval = "1h"
 
-    cache_key = f"{ticker}:{period}:{interval}"
+    cache_key = f"{ticker}:{period}:{interval}:{start}"
     now = time.time()
     cache_limit_sec = 900 if interval != "1d" else 14400
 
@@ -334,12 +334,20 @@ def get_history(ticker: str, period: str = "1mo"):
                 return parsed_data
 
         t = yf.Ticker(ticker)
-        hist = t.history(period=period, interval=interval)
+        if start:
+            hist = t.history(start=start, interval=interval)
+        else:
+            hist = t.history(period=period, interval=interval)
+            
         if hist.empty:
-            hist = t.history(period=period, interval="1d")
+            if start:
+                hist = t.history(start=start, interval="1d")
+            else:
+                hist = t.history(period=period, interval="1d")
+                
             if hist.empty:
                 conn.close()
-                raise HTTPException(status_code=404, detail=f"No history found for {ticker} with period {period}")
+                raise HTTPException(status_code=404, detail=f"No history found for {ticker}")
 
         # Optmized dataframe conversion (avoid iterrows)
         dates = hist.index
@@ -453,6 +461,7 @@ def get_exchange_rate(from_curr: str, to_curr: str):
 class BatchSymbolsRequest(BaseModel):
     symbols: list[str]
     period: str = "1mo"
+    start: Optional[str] = None
 
 class BatchPairsRequest(BaseModel):
     pairs: list[dict] # [{"from": "USD", "to": "EUR"}]
@@ -473,7 +482,7 @@ async def get_histories_batch(req: BatchSymbolsRequest):
     results = {}
     async def fetch(ticker):
         try:
-            results[ticker] = await asyncio.to_thread(get_history, ticker, req.period)
+            results[ticker] = await asyncio.to_thread(get_history, ticker, req.period, req.start)
         except Exception:
             results[ticker] = []
     await asyncio.gather(*(fetch(t) for t in req.symbols))
