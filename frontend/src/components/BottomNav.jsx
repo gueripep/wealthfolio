@@ -1,4 +1,4 @@
-import { LayoutDashboard, Download, Settings } from 'lucide-react';
+import { LayoutDashboard, Target, Download, Settings } from 'lucide-react';
 
 export default function BottomNav({ currentView, navigate }) {
   return (
@@ -6,6 +6,10 @@ export default function BottomNav({ currentView, navigate }) {
       <a href="#" className={`nav-item ${currentView === 'dashboard' || currentView === 'assetDetail' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); navigate('dashboard'); }}>
         <LayoutDashboard size={24} />
         <span>Dashboard</span>
+      </a>
+      <a href="#" className={`nav-item ${currentView === 'strategy' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); navigate('strategy'); }}>
+        <Target size={24} />
+        <span>Strategy</span>
       </a>
       <a href="#" className={`nav-item ${currentView === 'import' ? 'active' : ''}`} onClick={(e) => { e.preventDefault(); navigate('import'); }}>
         <Download size={24} />

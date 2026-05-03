@@ -5,6 +5,7 @@ import BottomNav from './components/BottomNav';
 import Dashboard from './views/Dashboard';
 import ImportView from './views/ImportView';
 import SettingsView from './views/SettingsView';
+import StrategyView from './views/StrategyView';
 import AssetDetail from './views/AssetDetail';
 import Modal from './components/Modal';
 
@@ -136,6 +137,7 @@ export default function App() {
   return (
     <div id="app">
       {currentView === 'dashboard' && <Dashboard navigate={navigate} openModal={openModal} />}
+      {currentView === 'strategy' && <StrategyView />}
       {currentView === 'import' && <ImportView />}
       {currentView === 'categories' && <SettingsView />}
       {currentView === 'assetDetail' && <AssetDetail symbol={selectedAsset} navigate={navigate} openModal={openModal} />}

@@ -23,9 +23,9 @@ export default function SettingsView() {
   const handleAddCategory = () => {
     const name = newCatName.trim();
     if (name && !portfolio.customCategories.includes(name)) {
-      savePortfolio({ 
-        ...portfolio, 
-        customCategories: [...portfolio.customCategories, name] 
+      savePortfolio({
+        ...portfolio,
+        customCategories: [...portfolio.customCategories, name]
       });
       setNewCatName('');
     } else if (portfolio.customCategories.includes(name)) {
@@ -37,6 +37,12 @@ export default function SettingsView() {
     const debts = portfolio.debtCategories || [];
     const newDebts = isDebt ? [...debts, cat] : debts.filter(c => c !== cat);
     savePortfolio({ ...portfolio, debtCategories: newDebts });
+  };
+
+  const toggleUnleveragedCategory = (cat, isUnleveraged) => {
+    const unlevs = portfolio.unleveragedCategories || [];
+    const newUnlevs = isUnleveraged ? [...unlevs, cat] : unlevs.filter(c => c !== cat);
+    savePortfolio({ ...portfolio, unleveragedCategories: newUnlevs });
   };
 
   const renameCategory = (oldName) => {
@@ -114,23 +120,23 @@ export default function SettingsView() {
 
   return (
     <section id="categories-view">
-      <h2 style={{marginBottom: '20px'}}>Settings & Classifications</h2>
+      <h2 style={{ marginBottom: '20px' }}>Settings & Classifications</h2>
 
       <div className="card" id="account-card">
-        <h3 style={{marginBottom: '12px'}}>Account</h3>
+        <h3 style={{ marginBottom: '12px' }}>Account</h3>
         <div className="flex-between">
           <div>
-            <div style={{fontWeight: 500}} id="account-email">{currentUser?.email || '—'}</div>
-            <div className="muted" style={{fontSize: '0.8rem'}}>Signed in</div>
+            <div style={{ fontWeight: 500 }} id="account-email">{currentUser?.email || '—'}</div>
+            <div className="muted" style={{ fontSize: '0.8rem' }}>Signed in</div>
           </div>
-          <button className="btn btn-secondary" onClick={() => { if(window.confirm('Sign out?')) logout(); }} style={{padding: '8px 16px', fontSize: '0.85rem'}}>
+          <button className="btn btn-secondary" onClick={() => { if (window.confirm('Sign out?')) logout(); }} style={{ padding: '8px 16px', fontSize: '0.85rem' }}>
             Sign Out
           </button>
         </div>
       </div>
 
       <div className="card">
-        <h3 style={{marginBottom: '16px'}}>App Settings</h3>
+        <h3 style={{ marginBottom: '16px' }}>App Settings</h3>
         <div className="input-group">
           <label className="input-label">Base Currency</label>
           <select value={portfolio.baseCurrency || 'USD'} onChange={handleBaseCurrencyChange}>
@@ -148,33 +154,44 @@ export default function SettingsView() {
       </div>
 
       <div className="card">
-        <h3 style={{marginBottom: '16px'}}>Add New Category</h3>
-        <div className="flex-between" style={{gap: '12px'}}>
-          <input type="text" value={newCatName} onChange={e => setNewCatName(e.target.value)} placeholder="E.g. Real Estate, Private Equity..." style={{flex: 1}} />
-          <button className="btn btn-primary" onClick={handleAddCategory} style={{padding: '12px'}}>
+        <h3 style={{ marginBottom: '16px' }}>Add New Category</h3>
+        <div className="flex-between" style={{ gap: '12px' }}>
+          <input type="text" value={newCatName} onChange={e => setNewCatName(e.target.value)} placeholder="E.g. Real Estate, Private Equity..." style={{ flex: 1 }} />
+          <button className="btn btn-primary" onClick={handleAddCategory} style={{ padding: '12px' }}>
             <Plus size={16} />
           </button>
         </div>
       </div>
-      
+
       <div id="category-list">
         {portfolio.customCategories.map(cat => (
           <div className="category-row" key={cat}>
-            <div style={{display: 'flex', flexDirection: 'column'}}>
-              <span style={{fontWeight: 500}}>{cat}</span>
-              <label className="switch-wrapper muted" style={{fontSize: '0.8rem', marginTop: '6px'}}>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ fontWeight: 500 }}>{cat}</span>
+              <label className="switch-wrapper muted" style={{ fontSize: '0.8rem', marginTop: '6px' }}>
                 <div className="switch">
-                  <input 
-                    type="checkbox" 
-                    checked={portfolio.debtCategories?.includes(cat) || false} 
+                  <input
+                    type="checkbox"
+                    checked={portfolio.debtCategories?.includes(cat) || false}
                     onChange={(e) => toggleDebtCategory(cat, e.target.checked)}
                   />
                   <span className="slider"></span>
                 </div>
-                Is Debt / Leverage
+                Is Debt
+              </label>
+              <label className="switch-wrapper muted" style={{ fontSize: '0.8rem', marginTop: '6px' }}>
+                <div className="switch">
+                  <input
+                    type="checkbox"
+                    checked={portfolio.unleveragedCategories?.includes(cat) || false}
+                    onChange={(e) => toggleUnleveragedCategory(cat, e.target.checked)}
+                  />
+                  <span className="slider"></span>
+                </div>
+                Limit to 1x Exposure
               </label>
             </div>
-            <div className="flex-center" style={{gap: '4px'}}>
+            <div className="flex-center" style={{ gap: '4px' }}>
               <button className="btn-icon" onClick={() => renameCategory(cat)} title="Rename">
                 <Pencil size={16} />
               </button>
@@ -186,36 +203,36 @@ export default function SettingsView() {
         ))}
       </div>
 
-      <div className="card" style={{marginTop: '32px'}}>
-        <h3 style={{marginBottom: '16px'}}>Target Asset Allocation</h3>
-        <p className="muted" style={{fontSize: '0.85rem', marginBottom: '16px'}}>
+      <div className="card" style={{ marginTop: '32px' }}>
+        <h3 style={{ marginBottom: '16px' }}>Target Asset Allocation</h3>
+        <p className="muted" style={{ fontSize: '0.85rem', marginBottom: '16px' }}>
           Define your ideal portfolio repartition. The total should ideally be 100%.
         </p>
-        <div style={{display: 'flex', flexDirection: 'column', gap: '12px'}}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {portfolio.customCategories.map(cat => {
             const currentTarget = localTargets[cat] || 0;
             return (
               <div key={`target-${cat}`} className="flex-between">
-                <span style={{fontSize: '0.9rem'}}>{cat}</span>
-                <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
-                  <input 
-                    type="number" 
-                    min="0" 
-                    max="100" 
+                <span style={{ fontSize: '0.9rem' }}>{cat}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input
+                    type="number"
+                    min="0"
+                    max="100"
                     value={currentTarget}
                     onChange={(e) => {
                       const val = parseFloat(e.target.value) || 0;
                       setLocalTargets(prev => ({ ...prev, [cat]: val }));
                       setHasUnsavedTargets(true);
                     }}
-                    style={{width: '70px', padding: '6px'}}
+                    style={{ width: '70px', padding: '6px' }}
                   />
-                  <span className="muted" style={{fontSize: '0.9rem'}}>%</span>
+                  <span className="muted" style={{ fontSize: '0.9rem' }}>%</span>
                 </div>
               </div>
             );
           })}
-          <div className="flex-between" style={{marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-color)'}}>
+          <div className="flex-between" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-color)' }}>
             <strong>Total</strong>
             <strong style={{
               color: Object.values(localTargets).reduce((a, b) => a + b, 0) === 100 ? '#10b981' : '#ef4444'
@@ -223,12 +240,12 @@ export default function SettingsView() {
               {Object.values(localTargets).reduce((a, b) => a + b, 0)}%
             </strong>
           </div>
-          <div className="flex-between" style={{marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-color)'}}>
-            <strong style={{fontSize: '0.9rem'}}>Target Net Exposure</strong>
-            <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
-              <input 
-                type="number" 
-                min="0" 
+          <div className="flex-between" style={{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--border-color)' }}>
+            <strong style={{ fontSize: '0.9rem' }}>Target Net Exposure</strong>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <input
+                type="number"
+                min="0"
                 step="0.1"
                 value={localTargetNetExposure}
                 onChange={(e) => {
@@ -236,15 +253,15 @@ export default function SettingsView() {
                   setLocalTargetNetExposure(val);
                   setHasUnsavedTargets(true);
                 }}
-                style={{width: '70px', padding: '6px'}}
+                style={{ width: '70px', padding: '6px' }}
               />
-              <span className="muted" style={{fontSize: '0.9rem'}}>x</span>
+              <span className="muted" style={{ fontSize: '0.9rem' }}>x</span>
             </div>
           </div>
           {hasUnsavedTargets && (
-            <button 
-              className="btn btn-primary" 
-              style={{marginTop: '16px', padding: '10px'}}
+            <button
+              className="btn btn-primary"
+              style={{ marginTop: '16px', padding: '10px' }}
               onClick={() => {
                 savePortfolio({ ...portfolio, targetAllocation: localTargets, targetNetExposure: localTargetNetExposure });
                 setHasUnsavedTargets(false);
@@ -256,10 +273,10 @@ export default function SettingsView() {
         </div>
       </div>
 
-      <div className="card" style={{marginTop: '32px', border: '1px solid #ef444433'}}>
-        <h3 style={{color: '#ef4444', marginBottom: '8px'}}>Danger Zone</h3>
-        <p className="muted" style={{marginBottom: '16px', fontSize: '0.9rem'}}>This will permanently delete ALL transactions and reset your portfolio. This action cannot be undone.</p>
-        <button className="btn" onClick={wipePortfolio} style={{width: '100%', background: '#ef4444', color: 'white'}}>Wipe Portfolio</button>
+      <div className="card" style={{ marginTop: '32px', border: '1px solid #ef444433' }}>
+        <h3 style={{ color: '#ef4444', marginBottom: '8px' }}>Danger Zone</h3>
+        <p className="muted" style={{ marginBottom: '16px', fontSize: '0.9rem' }}>This will permanently delete ALL transactions and reset your portfolio. This action cannot be undone.</p>
+        <button className="btn" onClick={wipePortfolio} style={{ width: '100%', background: '#ef4444', color: 'white' }}>Wipe Portfolio</button>
       </div>
     </section>
   );

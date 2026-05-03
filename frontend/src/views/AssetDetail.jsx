@@ -21,6 +21,8 @@ export default function AssetDetail({ symbol, navigate, openModal }) {
     return initial;
   });
 
+  const [localTer, setLocalTer] = useState(portfolio.assetTers?.[symbol]?.toString() || '0');
+
   if (!asset) return null;
 
   const priceData = currentPrices[symbol] || { price: 0, currency: 'USD', dayChangePercent: 0, name: symbol };
@@ -159,6 +161,32 @@ export default function AssetDetail({ symbol, navigate, openModal }) {
             </button>
           </div>
         )}
+      </div>
+
+      <div className="card">
+        <h3 style={{marginBottom: '12px'}}>Cost / TER</h3>
+        <div className="flex-between">
+          <label className="input-label" style={{marginBottom: 0}}>Annual Expense Ratio (%)</label>
+          <div style={{display: 'flex', alignItems: 'center', gap: '8px'}}>
+            <input 
+              type="number" 
+              step="0.01"
+              value={localTer} 
+              onChange={e => setLocalTer(e.target.value)}
+              onBlur={() => {
+                const val = parseFloat(localTer) || 0;
+                savePortfolio({
+                  ...portfolio,
+                  assetTers: { ...portfolio.assetTers, [symbol]: val }
+                });
+              }}
+              style={{width: '80px', padding: '8px', borderRadius: '4px', border: '1px solid var(--border)', background: 'var(--bg)', color: 'var(--fg)', textAlign: 'right'}}
+            />
+          </div>
+        </div>
+        <p className="muted" style={{fontSize: '0.75rem', marginTop: '8px'}}>
+          The Total Expense Ratio (TER) is used to calculate the fee drag in your rebalancing guide.
+        </p>
       </div>
 
       <div className="card">

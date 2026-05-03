@@ -1,18 +1,17 @@
 import { useState, useEffect } from 'react';
 import { Plus } from 'lucide-react';
-import { Line, Doughnut } from 'react-chartjs-2';
-import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler, ArcElement } from 'chart.js';
+import { Line } from 'react-chartjs-2';
+import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler } from 'chart.js';
 import { usePortfolio } from '../context/PortfolioContext';
 import { getAssetSummary, formatCurrency, getExchangeRate } from '../utils/helpers';
 import { calculateAnalytics } from '../utils/analytics';
 
-ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler, ArcElement);
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Title, Tooltip, Legend, Filler);
 
 export default function Dashboard({ navigate, openModal }) {
   const { portfolio, currentPrices, exchangeRates } = usePortfolio();
   const [displayMode, setDisplayMode] = useState('tickers');
   const [selectedPeriod, setSelectedPeriod] = useState('1mo');
-  
   const [analytics, setAnalytics] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -28,7 +27,7 @@ export default function Dashboard({ navigate, openModal }) {
     gradient.addColorStop(1, '#ef4444');
     return gradient;
   };
-  
+
   const assets = getAssetSummary(portfolio, currentPrices);
 
   useEffect(() => {
@@ -45,17 +44,22 @@ export default function Dashboard({ navigate, openModal }) {
     fetchData();
   }, [portfolio, currentPrices, exchangeRates, selectedPeriod]);
 
-  // Total Value Calculation
+  // 1. Calculate Absolute Baseline Totals
   let totalValueBase = 0;
-  const renderedAssetList = [];
+  assets.forEach(a => {
+    const priceData = currentPrices[a.symbol] || { price: 0, currency: 'USD' };
+    const rate = exchangeRates[`${priceData.currency}${portfolio.baseCurrency}`] || 1.0;
+    totalValueBase += (a.quantity * priceData.price) * rate;
+  });
 
+  // 2. Render Logic
+  const renderedAssetList = [];
   if (displayMode === 'tickers') {
     assets.forEach(asset => {
       const priceData = currentPrices[asset.symbol] || { price: 0, currency: 'USD' };
       const pair = `${priceData.currency}${portfolio.baseCurrency}`;
       const rate = exchangeRates[pair] || 1.0;
       const valueBase = (asset.quantity * priceData.price) * rate;
-      totalValueBase += valueBase;
 
       const startPrice = analytics?.periodStartPrices?.[asset.symbol] || priceData.price;
       const startValueBase = (asset.quantity * startPrice) * rate;
@@ -110,7 +114,6 @@ export default function Dashboard({ navigate, openModal }) {
 
     const categoriesList = Object.values(catSummary).sort((a, b) => b.value - a.value);
     categoriesList.forEach(cat => {
-      totalValueBase += cat.value;
       let catStartValueBase = 0;
       cat.assetSymbols.forEach(symbol => {
         const qty = getAssetSummary(portfolio, currentPrices, symbol).quantity;
@@ -151,55 +154,7 @@ export default function Dashboard({ navigate, openModal }) {
     });
   }
 
-  // Chart Logic
-  const repData = {};
-  let calcGrossExposure = 0;
-  let calcNetExposure = 0;
 
-  assets.forEach(a => {
-    const priceData = currentPrices[a.symbol] || { price: 0, currency: 'USD' };
-    const rate = exchangeRates[`${priceData.currency}${portfolio.baseCurrency}`] || 1.0;
-    const valBase = (a.quantity * priceData.price) * rate;
-    if (valBase > 0) {
-      let mix = {};
-      if (typeof a.category === 'string') {
-        mix = { [a.category || 'Other']: 1.0 };
-      } else if (typeof a.category === 'object' && a.category !== null) {
-        mix = a.category;
-      } else {
-        mix = { 'Other': 1.0 };
-      }
-      Object.entries(mix).forEach(([catName, weight]) => {
-        const componentValue = valBase * weight;
-        calcGrossExposure += componentValue;
-        
-        if (!portfolio.debtCategories?.includes(catName)) {
-          calcNetExposure += componentValue;
-          if (componentValue > 0) {
-            repData[catName] = (repData[catName] || 0) + componentValue;
-          }
-        }
-      });
-    }
-  });
-
-  const repLabels = Object.keys(repData);
-  const repValues = Object.values(repData);
-  const repTotal = repValues.reduce((a, b) => a + b, 0);
-
-  const targetKeys = Object.keys(portfolio.targetAllocation || {});
-  const allCategoriesSet = new Set([...repLabels, ...targetKeys]);
-  const allTargetCategories = Array.from(allCategoriesSet).filter(cat => {
-     const currentVal = repData[cat] || 0;
-     const targetVal = portfolio.targetAllocation?.[cat] || 0;
-     return currentVal > 0 || targetVal > 0;
-  }).sort((a, b) => (repData[b] || 0) - (repData[a] || 0));
-  
-  const grossExposure = calcGrossExposure;
-  const netExposure = calcNetExposure;
-  
-  const grossMult = totalValueBase > 0 ? (grossExposure / totalValueBase) : 0;
-  const netMult = totalValueBase > 0 ? (netExposure / totalValueBase) : 0;
 
   const getCommonOptions = () => ({
     plugins: {
@@ -323,67 +278,6 @@ export default function Dashboard({ navigate, openModal }) {
         </div>
       </div>
 
-      <div className="card">
-        <div className="flex-between" style={{marginBottom: '16px'}}>
-          <h3 style={{marginBottom: 0}}>Asset Repartition</h3>
-          <div style={{textAlign: 'right'}}>
-            <div className="muted" style={{fontSize: '0.75rem'}}>
-              Net Exposure: <strong style={{color: 'var(--text-main)'}}>{netMult.toFixed(2)}x</strong>
-              {portfolio.targetNetExposure !== undefined && (
-                <span style={{marginLeft: '4px', opacity: 0.8}}>/ {portfolio.targetNetExposure.toFixed(2)}x</span>
-              )}
-            </div>
-            <div className="muted" style={{fontSize: '0.75rem'}}>Gross Exposure: <strong style={{color: 'var(--text-main)'}}>{grossMult.toFixed(2)}x</strong></div>
-          </div>
-        </div>
-        <div style={{height: '250px', position: 'relative'}}>
-          <Doughnut 
-            data={{
-              labels: repLabels.map((l, i) => `${l} (${((repValues[i] / repTotal) * 100).toFixed(1)}%)`),
-              datasets: [{
-                data: repValues,
-                backgroundColor: ['#6366f1', '#ec4899', '#10b981', '#f59e0b', '#3b82f6', '#8b5cf6', '#f97316'],
-                borderWidth: 0
-              }]
-            }}
-            options={{
-              plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8' } } },
-              cutout: '70%',
-              maintainAspectRatio: false,
-              animation: { duration: 350 }
-            }}
-          />
-        </div>
-
-        {portfolio.targetAllocation && Object.keys(portfolio.targetAllocation).length > 0 && (
-          <div style={{marginTop: '24px', borderTop: '1px solid var(--border-color)', paddingTop: '16px'}}>
-            <div className="flex-between" style={{marginBottom: '12px', fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em'}}>
-              <div style={{flex: 1}}>Target Breakdown</div>
-              <div style={{width: '60px', textAlign: 'right'}}>Actual</div>
-              <div style={{width: '60px', textAlign: 'right'}}>Target</div>
-              <div style={{width: '60px', textAlign: 'right'}}>Delta</div>
-            </div>
-            <div style={{display: 'flex', flexDirection: 'column', gap: '10px'}}>
-              {allTargetCategories.map(cat => {
-                const currentPct = repTotal > 0 ? ((repData[cat] || 0) / repTotal) * 100 : 0;
-                const targetPct = portfolio.targetAllocation[cat] || 0;
-                const deltaPct = currentPct - targetPct;
-                const isOffTarget = Math.abs(deltaPct) > 5;
-                return (
-                  <div key={`compare-${cat}`} className="flex-between" style={{fontSize: '0.85rem'}}>
-                    <div style={{flex: 1, fontWeight: isOffTarget ? 600 : 400}}>{cat}</div>
-                    <div style={{width: '60px', textAlign: 'right'}}>{currentPct.toFixed(1)}%</div>
-                    <div style={{width: '60px', textAlign: 'right', color: 'var(--text-muted)'}}>{targetPct.toFixed(1)}%</div>
-                    <div style={{width: '60px', textAlign: 'right'}} className={deltaPct > 0.1 ? 'gain' : (deltaPct < -0.1 ? 'loss' : 'muted')}>
-                      {deltaPct > 0.1 ? '+' : ''}{Math.abs(deltaPct) < 0.1 ? '0.0' : deltaPct.toFixed(1)}%
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </div>
 
       <div>
         <div className="dashboard-header">
