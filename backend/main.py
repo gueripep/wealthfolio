@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Depends
+from fastapi.responses import ORJSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 import yfinance as yf
@@ -15,6 +16,12 @@ from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
 import os
 import asyncio
+import time
+
+# --- In-Memory Caches (C-based dicts for max performance) ---
+QUOTE_MEM_CACHE = {}
+HISTORY_MEM_CACHE = {}
+EXCHANGE_RATE_MEM_CACHE = {}
 
 DB_PATH = "wealthfolio.db"
 
@@ -100,7 +107,7 @@ SECRET_KEY = get_or_create_secret_key()
 
 # --- FastAPI App ---
 
-app = FastAPI()
+app = FastAPI(default_response_class=ORJSONResponse)
 
 app.add_middleware(
     CORSMiddleware,
@@ -226,6 +233,13 @@ def save_portfolio(payload: PortfolioData, user: dict = Depends(get_current_user
 @app.get("/api/quote/{ticker}")
 def get_quote(ticker: str):
     ticker = ticker.upper()
+    now = time.time()
+    
+    # 1. Fast in-memory cache check
+    mem_cached = QUOTE_MEM_CACHE.get(ticker)
+    if mem_cached and now - mem_cached['timestamp'] < 3600:
+        return mem_cached['data']
+
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
@@ -237,7 +251,9 @@ def get_quote(ticker: str):
             last_updated_dt = datetime.fromisoformat(last_updated)
             if datetime.now() - last_updated_dt < timedelta(hours=1):
                 conn.close()
-                return json.loads(cached_data)
+                parsed_data = json.loads(cached_data)
+                QUOTE_MEM_CACHE[ticker] = {'data': parsed_data, 'timestamp': now}
+                return parsed_data
 
         t = yf.Ticker(ticker)
         info = t.info
@@ -268,6 +284,8 @@ def get_quote(ticker: str):
             "currency": info.get("currency", "USD")
         }
 
+        QUOTE_MEM_CACHE[ticker] = {'data': result, 'timestamp': now}
+
         c.execute("INSERT OR REPLACE INTO price_cache (ticker, data, last_updated) VALUES (?, ?, ?)",
                   (ticker, json.dumps(result), datetime.now().isoformat()))
         conn.commit()
@@ -292,6 +310,14 @@ def get_history(ticker: str, period: str = "1mo"):
         interval = "1h"
 
     cache_key = f"{ticker}:{period}:{interval}"
+    now = time.time()
+    cache_limit_sec = 900 if interval != "1d" else 14400
+
+    # 1. Fast in-memory cache check
+    mem_cached = HISTORY_MEM_CACHE.get(cache_key)
+    if mem_cached and now - mem_cached['timestamp'] < cache_limit_sec:
+        return mem_cached['data']
+
     try:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
@@ -301,10 +327,11 @@ def get_history(ticker: str, period: str = "1mo"):
         if row:
             cached_data, last_updated = row
             last_updated_dt = datetime.fromisoformat(last_updated)
-            cache_limit = timedelta(minutes=15) if interval != "1d" else timedelta(hours=4)
-            if datetime.now() - last_updated_dt < cache_limit:
+            if datetime.now() - last_updated_dt < timedelta(seconds=cache_limit_sec):
                 conn.close()
-                return json.loads(cached_data)
+                parsed_data = json.loads(cached_data)
+                HISTORY_MEM_CACHE[cache_key] = {'data': parsed_data, 'timestamp': now}
+                return parsed_data
 
         t = yf.Ticker(ticker)
         hist = t.history(period=period, interval=interval)
@@ -314,16 +341,25 @@ def get_history(ticker: str, period: str = "1mo"):
                 conn.close()
                 raise HTTPException(status_code=404, detail=f"No history found for {ticker} with period {period}")
 
-        data = []
-        for date, row_data in hist.iterrows():
-            date_str = date.strftime("%Y-%m-%dT%H:%M:%S") if interval != "1d" else date.strftime("%Y-%m-%d")
-            data.append({
-                "date": date_str,
-                "close": float(row_data['Close']),
-                "high": float(row_data['High']),
-                "low": float(row_data['Low']),
-                "open": float(row_data['Open'])
-            })
+        # Optmized dataframe conversion (avoid iterrows)
+        dates = hist.index
+        if interval != "1d":
+            date_strs = dates.strftime("%Y-%m-%dT%H:%M:%S").tolist()
+        else:
+            date_strs = dates.strftime("%Y-%m-%d").tolist()
+            
+        data = [
+            {
+                "date": d,
+                "close": float(c),
+                "high": float(h),
+                "low": float(l),
+                "open": float(o)
+            }
+            for d, c, h, l, o in zip(date_strs, hist['Close'], hist['High'], hist['Low'], hist['Open'])
+        ]
+
+        HISTORY_MEM_CACHE[cache_key] = {'data': data, 'timestamp': now}
 
         c.execute("INSERT OR REPLACE INTO history_cache (cache_key, data, last_updated) VALUES (?, ?, ?)",
                   (cache_key, json.dumps(data), datetime.now().isoformat()))
@@ -367,6 +403,12 @@ def get_exchange_rate(from_curr: str, to_curr: str):
         return {"rate": 1.0, "from": from_curr, "to": to_curr}
 
     pair = f"{from_curr}{to_curr}"
+    now = time.time()
+    
+    # 1. Fast in-memory cache check
+    mem_cached = EXCHANGE_RATE_MEM_CACHE.get(pair)
+    if mem_cached and now - mem_cached['timestamp'] < 3600:
+        return mem_cached['data']
 
     try:
         conn = sqlite3.connect(DB_PATH)
@@ -379,7 +421,9 @@ def get_exchange_rate(from_curr: str, to_curr: str):
             last_updated_dt = datetime.fromisoformat(last_updated)
             if datetime.now() - last_updated_dt < timedelta(hours=1):
                 conn.close()
-                return {"rate": rate, "from": from_curr, "to": to_curr, "cached": True}
+                result = {"rate": rate, "from": from_curr, "to": to_curr, "cached": True}
+                EXCHANGE_RATE_MEM_CACHE[pair] = {'data': result, 'timestamp': now}
+                return result
 
         ticker = f"{pair}=X"
         t = yf.Ticker(ticker)
@@ -394,10 +438,13 @@ def get_exchange_rate(from_curr: str, to_curr: str):
                 conn.close()
                 raise HTTPException(status_code=404, detail=f"Exchange rate for {pair} not found")
 
+        result = {"rate": rate, "from": from_curr, "to": to_curr, "cached": False}
+        EXCHANGE_RATE_MEM_CACHE[pair] = {'data': result, 'timestamp': now}
+
         c.execute("INSERT OR REPLACE INTO exchange_rate_cache (pair, rate, last_updated) VALUES (?, ?, ?)",
                   (pair, rate, datetime.now().isoformat()))
         conn.commit()
-        return {"rate": rate, "from": from_curr, "to": to_curr, "cached": False}
+        return result
     except Exception as e:
         if 'conn' in locals():
             conn.close()
@@ -450,4 +497,4 @@ async def get_exchange_rates_batch(req: BatchPairsRequest):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

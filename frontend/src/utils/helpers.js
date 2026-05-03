@@ -1,11 +1,12 @@
-export function formatCurrency(amount, currencyCode = 'USD') {
-  const safeAmount = (typeof amount === 'number' && isFinite(amount)) ? amount : 0;
+export function formatCurrency(amount, currencyCode = "USD") {
+  const safeAmount =
+    typeof amount === "number" && isFinite(amount) ? amount : 0;
   try {
     return new Intl.NumberFormat(undefined, {
-      style: 'currency',
-      currency: currencyCode || 'USD',
+      style: "currency",
+      currency: currencyCode || "USD",
       minimumFractionDigits: 2,
-      maximumFractionDigits: 2
+      maximumFractionDigits: 2,
     }).format(safeAmount);
   } catch {
     return safeAmount.toFixed(2);
@@ -27,42 +28,55 @@ export async function getExchangeRate(exchangeRates, from, to) {
   }
 }
 
-export function getAssetSummary(portfolio, currentPrices, specificSymbol = null) {
+export function getAssetSummary(
+  portfolio,
+  currentPrices,
+  specificSymbol = null,
+) {
   const summary = {};
-  const trackedSymbols = specificSymbol ? [specificSymbol] : Object.keys(portfolio.categories);
-  trackedSymbols.forEach(symbol => {
+  const trackedSymbols = specificSymbol
+    ? [specificSymbol]
+    : Object.keys(portfolio.categories);
+  trackedSymbols.forEach((symbol) => {
     summary[symbol] = {
       symbol: symbol,
       quantity: 0,
       totalCost: 0,
-      category: portfolio.categories[symbol] || portfolio.customCategories[0] || 'Stock',
-      transactions: []
+      category:
+        portfolio.categories[symbol] ||
+        portfolio.customCategories[0] ||
+        "Stock",
+      transactions: [],
     };
   });
 
   const txs = specificSymbol
-    ? portfolio.transactions.filter(t => t.symbol === specificSymbol)
+    ? portfolio.transactions.filter((t) => t.symbol === specificSymbol)
     : portfolio.transactions;
 
-  txs.forEach(tx => {
+  txs.forEach((tx) => {
     if (!summary[tx.symbol]) {
       summary[tx.symbol] = {
         symbol: tx.symbol,
         quantity: 0,
         totalCost: 0,
-        category: portfolio.categories[tx.symbol] || portfolio.customCategories[0] || 'Stock',
-        transactions: []
+        category:
+          portfolio.categories[tx.symbol] ||
+          portfolio.customCategories[0] ||
+          "Stock",
+        transactions: [],
       };
     }
     summary[tx.symbol].transactions.push(tx);
     const qty = parseFloat(tx.quantity) || 0;
     const price = parseFloat(tx.price) || 0;
-    if (tx.type === 'BUY' || tx.type === 'DEPOSIT') {
+    if (tx.type === "BUY" || tx.type === "DEPOSIT") {
       summary[tx.symbol].quantity += qty;
       summary[tx.symbol].totalCost += qty * price;
-    } else if (tx.type === 'SELL' || tx.type === 'WITHDRAWAL') {
+    } else if (tx.type === "SELL" || tx.type === "WITHDRAWAL") {
       if (summary[tx.symbol].quantity > 0) {
-        const avgPrice = summary[tx.symbol].totalCost / summary[tx.symbol].quantity;
+        const avgPrice =
+          summary[tx.symbol].totalCost / summary[tx.symbol].quantity;
         summary[tx.symbol].totalCost -= qty * avgPrice;
       }
       summary[tx.symbol].quantity -= qty;

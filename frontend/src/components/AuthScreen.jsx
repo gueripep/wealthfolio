@@ -1,35 +1,35 @@
-import { useState } from 'react';
-import { usePortfolio } from '../context/PortfolioContext';
+import { useState } from "react";
+import { usePortfolio } from "../context/PortfolioContext";
 
 export default function AuthScreen({ onLogin }) {
-  const [tab, setTab] = useState('login');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [passwordConfirm, setPasswordConfirm] = useState('');
-  const [error, setError] = useState('');
+  const [tab, setTab] = useState("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordConfirm, setPasswordConfirm] = useState("");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const { setAuthToken, setCurrentUser, setPortfolio } = usePortfolio();
 
   const handleLogin = async (e) => {
     e.preventDefault();
-    setError('');
+    setError("");
     setLoading(true);
     try {
-      const resp = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+      const resp = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
       });
       const data = await resp.json();
       if (!resp.ok) {
-        setError(data.detail || 'Login failed');
+        setError(data.detail || "Login failed");
         setLoading(false);
         return;
       }
       setAuthToken(data.token);
       setCurrentUser(data.user);
     } catch (err) {
-      setError('Could not connect to server.');
+      setError("Could not connect to server.");
       setLoading(false);
     }
   };
@@ -37,29 +37,31 @@ export default function AuthScreen({ onLogin }) {
   const handleRegister = async (e) => {
     e.preventDefault();
     if (password !== passwordConfirm) {
-      setError('Passwords do not match');
+      setError("Passwords do not match");
       return;
     }
-    setError('');
+    setError("");
     setLoading(true);
     try {
-      const resp = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
+      const resp = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
       });
       const data = await resp.json();
       if (!resp.ok) {
-        setError(data.detail || 'Registration failed');
+        setError(data.detail || "Registration failed");
         setLoading(false);
         return;
       }
 
-      const localData = localStorage.getItem('wealthfolio_portfolio');
+      const localData = localStorage.getItem("wealthfolio_portfolio");
       if (localData) {
         const parsed = JSON.parse(localData);
         if (parsed.transactions && parsed.transactions.length > 0) {
-          const migrate = window.confirm(`Import ${parsed.transactions.length} existing local transactions?`);
+          const migrate = window.confirm(
+            `Import ${parsed.transactions.length} existing local transactions?`,
+          );
           if (migrate) setPortfolio(parsed);
         }
       }
@@ -67,7 +69,7 @@ export default function AuthScreen({ onLogin }) {
       setAuthToken(data.token);
       setCurrentUser(data.user);
     } catch (err) {
-      setError('Could not connect to server.');
+      setError("Could not connect to server.");
       setLoading(false);
     }
   };
@@ -82,42 +84,94 @@ export default function AuthScreen({ onLogin }) {
         </div>
 
         <div className="segmented-control auth-tabs">
-          <div className={`segment-item ${tab === 'login' ? 'active' : ''}`} onClick={() => setTab('login')}>Sign In</div>
-          <div className={`segment-item ${tab === 'register' ? 'active' : ''}`} onClick={() => setTab('register')}>Create Account</div>
+          <div
+            className={`segment-item ${tab === "login" ? "active" : ""}`}
+            onClick={() => setTab("login")}
+          >
+            Sign In
+          </div>
+          <div
+            className={`segment-item ${tab === "register" ? "active" : ""}`}
+            onClick={() => setTab("register")}
+          >
+            Create Account
+          </div>
         </div>
 
-        {tab === 'login' ? (
+        {tab === "login" ? (
           <form className="auth-form" onSubmit={handleLogin}>
             <div className="input-group">
               <label className="input-label">Email</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" required />
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                required
+              />
             </div>
             <div className="input-group">
               <label className="input-label">Password</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Your password" required />
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Your password"
+                required
+              />
             </div>
             {error && <div className="auth-error">{error}</div>}
-            <button type="submit" className="btn btn-primary" style={{width: '100%'}} disabled={loading}>
-              {loading ? 'Please wait...' : 'Sign In'}
+            <button
+              type="submit"
+              className="btn btn-primary"
+              style={{ width: "100%" }}
+              disabled={loading}
+            >
+              {loading ? "Please wait..." : "Sign In"}
             </button>
           </form>
         ) : (
           <form className="auth-form" onSubmit={handleRegister}>
             <div className="input-group">
               <label className="input-label">Email</label>
-              <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@example.com" required />
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+                required
+              />
             </div>
             <div className="input-group">
               <label className="input-label">Password</label>
-              <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="At least 6 characters" required minLength={6} />
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="At least 6 characters"
+                required
+                minLength={6}
+              />
             </div>
             <div className="input-group">
               <label className="input-label">Confirm Password</label>
-              <input type="password" value={passwordConfirm} onChange={e => setPasswordConfirm(e.target.value)} placeholder="Repeat password" required minLength={6} />
+              <input
+                type="password"
+                value={passwordConfirm}
+                onChange={(e) => setPasswordConfirm(e.target.value)}
+                placeholder="Repeat password"
+                required
+                minLength={6}
+              />
             </div>
             {error && <div className="auth-error">{error}</div>}
-            <button type="submit" className="btn btn-primary" style={{width: '100%'}} disabled={loading}>
-              {loading ? 'Please wait...' : 'Create Account'}
+            <button
+              type="submit"
+              className="btn btn-primary"
+              style={{ width: "100%" }}
+              disabled={loading}
+            >
+              {loading ? "Please wait..." : "Create Account"}
             </button>
           </form>
         )}

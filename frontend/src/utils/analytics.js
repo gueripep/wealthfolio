@@ -1,13 +1,22 @@
-import { getExchangeRate } from './helpers';
+import { getExchangeRate } from "./helpers";
 
-export async function calculateAnalytics(portfolio, currentPrices, exchangeRates, period, assets) {
-  const symbols = assets.map(a => a.symbol);
-  
+export async function calculateAnalytics(
+  portfolio,
+  currentPrices,
+  exchangeRates,
+  period,
+  assets,
+) {
+  const symbols = assets.map((a) => a.symbol);
+
   const pairsToFetch = [];
   const localExchangeRates = { ...exchangeRates };
-  
-  symbols.forEach(s => {
-    const currency = s === '$$CASH_TX' ? portfolio.baseCurrency : (currentPrices[s]?.currency || 'USD');
+
+  symbols.forEach((s) => {
+    const currency =
+      s === "$$CASH_TX"
+        ? portfolio.baseCurrency
+        : currentPrices[s]?.currency || "USD";
     if (currency !== portfolio.baseCurrency) {
       const pair = `${currency}${portfolio.baseCurrency}`;
       if (localExchangeRates[pair] == null) {
@@ -18,10 +27,10 @@ export async function calculateAnalytics(portfolio, currentPrices, exchangeRates
 
   if (pairsToFetch.length > 0) {
     try {
-      const resp = await fetch('/api/exchange_rates', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pairs: pairsToFetch })
+      const resp = await fetch("/api/exchange_rates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pairs: pairsToFetch }),
       });
       if (resp.ok) {
         const data = await resp.json();
@@ -33,29 +42,29 @@ export async function calculateAnalytics(portfolio, currentPrices, exchangeRates
   let historyMap = {};
   if (symbols.length > 0) {
     try {
-      const resp = await fetch('/api/histories', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ symbols, period })
+      const resp = await fetch("/api/histories", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ symbols, period }),
       });
       if (resp.ok) {
         historyMap = await resp.json();
       }
     } catch (e) {}
   }
-  
+
   symbols.forEach((s) => {
     if (!historyMap[s] || !Array.isArray(historyMap[s])) {
       historyMap[s] = [];
     }
   });
 
-  const histories = symbols.map(s => historyMap[s]);
+  const histories = symbols.map((s) => historyMap[s]);
 
   let allDates = [];
   const dateSet = new Set();
-  histories.forEach(h => {
-    if (Array.isArray(h)) h.forEach(d => dateSet.add(d.date));
+  histories.forEach((h) => {
+    if (Array.isArray(h)) h.forEach((d) => dateSet.add(d.date));
   });
   allDates = Array.from(dateSet).sort();
 
@@ -64,12 +73,14 @@ export async function calculateAnalytics(portfolio, currentPrices, exchangeRates
   }
 
   const periodStartPrices = {};
-  symbols.forEach(s => {
+  symbols.forEach((s) => {
     const firstData = historyMap[s][0];
     if (firstData) periodStartPrices[s] = firstData.close;
   });
 
-  const sortedTxs = [...portfolio.transactions].sort((a, b) => new Date(a.date) - new Date(b.date));
+  const sortedTxs = [...portfolio.transactions].sort(
+    (a, b) => new Date(a.date) - new Date(b.date),
+  );
 
   let portfolioGains = [];
   let portfolioValues = [];
@@ -78,29 +89,37 @@ export async function calculateAnalytics(portfolio, currentPrices, exchangeRates
   const assetCosts = {};
   let realizedGainBase = 0;
 
-  symbols.forEach(s => {
+  symbols.forEach((s) => {
     assetBalances[s] = 0;
     assetCosts[s] = 0;
   });
 
   let txIdx = 0;
 
-  allDates.forEach(dateStr => {
+  allDates.forEach((dateStr) => {
     let dailyUnrealizedGainBase = 0;
     let dailyValueBase = 0;
-    const dateObj = dateStr.includes('T') ? new Date(dateStr) : new Date(dateStr + 'T23:59:59.999Z');
+    const dateObj = dateStr.includes("T")
+      ? new Date(dateStr)
+      : new Date(dateStr + "T23:59:59.999Z");
 
-    while (txIdx < sortedTxs.length && new Date(sortedTxs[txIdx].date) <= dateObj) {
+    while (
+      txIdx < sortedTxs.length &&
+      new Date(sortedTxs[txIdx].date) <= dateObj
+    ) {
       const tx = sortedTxs[txIdx];
       if (assetBalances.hasOwnProperty(tx.symbol)) {
-        const currency = tx.symbol === '$$CASH_TX' ? portfolio.baseCurrency : (currentPrices[tx.symbol]?.currency || 'USD');
+        const currency =
+          tx.symbol === "$$CASH_TX"
+            ? portfolio.baseCurrency
+            : currentPrices[tx.symbol]?.currency || "USD";
         const pair = `${currency}${portfolio.baseCurrency}`;
         const rate = localExchangeRates[pair] || 1.0;
 
-        if (tx.type === 'BUY' || tx.type === 'DEPOSIT') {
+        if (tx.type === "BUY" || tx.type === "DEPOSIT") {
           assetBalances[tx.symbol] += tx.quantity;
           assetCosts[tx.symbol] += tx.quantity * tx.price;
-        } else if (tx.type === 'SELL' || tx.type === 'WITHDRAWAL') {
+        } else if (tx.type === "SELL" || tx.type === "WITHDRAWAL") {
           if (assetBalances[tx.symbol] > 0) {
             const avgPrice = assetCosts[tx.symbol] / assetBalances[tx.symbol];
             const realized = tx.quantity * (tx.price - avgPrice);
@@ -113,11 +132,11 @@ export async function calculateAnalytics(portfolio, currentPrices, exchangeRates
       txIdx++;
     }
 
-    symbols.forEach(symbol => {
-      if (symbol === '$$CASH_TX') {
+    symbols.forEach((symbol) => {
+      if (symbol === "$$CASH_TX") {
         lastKnownPrices[symbol] = 1.0;
       } else {
-        const dayData = historyMap[symbol].find(d => d.date === dateStr);
+        const dayData = historyMap[symbol].find((d) => d.date === dateStr);
         if (dayData) lastKnownPrices[symbol] = dayData.close;
       }
 
@@ -126,12 +145,15 @@ export async function calculateAnalytics(portfolio, currentPrices, exchangeRates
       const costBasis = assetCosts[symbol];
 
       if (price !== undefined) {
-        const currency = symbol === '$$CASH_TX' ? portfolio.baseCurrency : (currentPrices[symbol]?.currency || 'USD');
+        const currency =
+          symbol === "$$CASH_TX"
+            ? portfolio.baseCurrency
+            : currentPrices[symbol]?.currency || "USD";
         const pair = `${currency}${portfolio.baseCurrency}`;
         const rate = localExchangeRates[pair] || 1.0;
-        const valueBase = (qty * price) * rate;
+        const valueBase = qty * price * rate;
         dailyValueBase += valueBase;
-        dailyUnrealizedGainBase += valueBase - (costBasis * rate);
+        dailyUnrealizedGainBase += valueBase - costBasis * rate;
       }
     });
     portfolioGains.push(dailyUnrealizedGainBase + realizedGainBase);
@@ -139,18 +161,24 @@ export async function calculateAnalytics(portfolio, currentPrices, exchangeRates
   });
 
   const now = new Date();
-  const todayStr = now.toISOString().split('T')[0];
+  const todayStr = now.toISOString().split("T")[0];
   let currentLiveValueTotal = 0;
   let currentLiveCostTotal = 0;
 
   for (const asset of assets) {
-    const priceData = currentPrices[asset.symbol] || { price: 0, currency: 'USD' };
-    const rate = localExchangeRates[`${priceData.currency}${portfolio.baseCurrency}`] || 1.0;
+    const priceData = currentPrices[asset.symbol] || {
+      price: 0,
+      currency: "USD",
+    };
+    const rate =
+      localExchangeRates[`${priceData.currency}${portfolio.baseCurrency}`] ||
+      1.0;
     currentLiveValueTotal += asset.quantity * priceData.price * rate;
     currentLiveCostTotal += asset.totalCost * rate;
   }
 
-  let currentLiveGainTotal = (currentLiveValueTotal - currentLiveCostTotal) + realizedGainBase;
+  let currentLiveGainTotal =
+    currentLiveValueTotal - currentLiveCostTotal + realizedGainBase;
 
   const lastDate = allDates[allDates.length - 1];
   if (!lastDate.includes(todayStr)) {
@@ -162,8 +190,8 @@ export async function calculateAnalytics(portfolio, currentPrices, exchangeRates
     portfolioValues[portfolioValues.length - 1] = currentLiveValueTotal;
   }
 
-  if (period === 'max') {
-    const firstMovingIdx = portfolioGains.findIndex(g => g !== 0);
+  if (period === "max") {
+    const firstMovingIdx = portfolioGains.findIndex((g) => g !== 0);
     if (firstMovingIdx > 0) {
       allDates = allDates.slice(firstMovingIdx);
       portfolioGains = portfolioGains.slice(firstMovingIdx);
@@ -172,27 +200,33 @@ export async function calculateAnalytics(portfolio, currentPrices, exchangeRates
   }
 
   const startPoint = portfolioGains[0] || 0;
-  const relativeGains = portfolioGains.map(g => g - startPoint);
+  const relativeGains = portfolioGains.map((g) => g - startPoint);
 
   let sp500RelativeGains = [];
   try {
     const spResp = await fetch(`/api/history/%5EGSPC?period=${period}`);
     const spHistory = spResp.ok ? await spResp.json() : [];
     if (Array.isArray(spHistory) && spHistory.length > 0) {
-      const spSorted = spHistory.slice().sort((a, b) => a.date < b.date ? -1 : 1);
+      const spSorted = spHistory
+        .slice()
+        .sort((a, b) => (a.date < b.date ? -1 : 1));
       const portfolioBase = portfolioValues[0] || 1;
       let spBase = null;
-      sp500RelativeGains = allDates.map(dateStr => {
-        let lo = 0, hi = spSorted.length - 1, found = null;
+      sp500RelativeGains = allDates.map((dateStr) => {
+        let lo = 0,
+          hi = spSorted.length - 1,
+          found = null;
         while (lo <= hi) {
           const mid = (lo + hi) >> 1;
-          if (spSorted[mid].date <= dateStr) { found = mid; lo = mid + 1; }
-          else hi = mid - 1;
+          if (spSorted[mid].date <= dateStr) {
+            found = mid;
+            lo = mid + 1;
+          } else hi = mid - 1;
         }
         if (found === null) return null;
         const spClose = spSorted[found].close;
         if (spBase === null) spBase = spClose;
-        return ((spClose / spBase) - 1) * portfolioBase;
+        return (spClose / spBase - 1) * portfolioBase;
       });
     }
   } catch (_) {}
@@ -203,6 +237,6 @@ export async function calculateAnalytics(portfolio, currentPrices, exchangeRates
     sp500RelativeGains,
     portfolioValues,
     periodStartPrices,
-    currentLiveValueTotal
+    currentLiveValueTotal,
   };
 }
