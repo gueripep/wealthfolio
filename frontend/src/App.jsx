@@ -150,7 +150,7 @@ export default function App() {
       {currentView === "dashboard" && (
         <Dashboard navigate={navigate} openModal={openModal} />
       )}
-      {currentView === "strategy" && <StrategyView />}
+      {currentView === "strategy" && <StrategyView navigate={navigate} />}
       {currentView === "import" && <ImportView />}
       {currentView === "categories" && <SettingsView />}
       {currentView === "assetDetail" && (

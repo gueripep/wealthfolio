@@ -55,6 +55,7 @@ export default function Dashboard({ navigate, openModal }) {
   const assets = getAssetSummary(portfolio, currentPrices);
 
   useEffect(() => {
+    let ignore = false;
     const fetchData = async () => {
       setLoading(true);
       try {
@@ -65,13 +66,18 @@ export default function Dashboard({ navigate, openModal }) {
           selectedPeriod,
           assets,
         );
-        setAnalytics(data);
+        if (!ignore) {
+          setAnalytics(data);
+        }
       } catch (e) {
         console.error(e);
       }
-      setLoading(false);
+      if (!ignore) {
+        setLoading(false);
+      }
     };
     fetchData();
+    return () => { ignore = true; };
   }, [portfolio, currentPrices, exchangeRates, selectedPeriod]);
 
   // 1. Calculate Absolute Baseline Totals

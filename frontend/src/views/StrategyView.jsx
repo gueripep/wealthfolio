@@ -6,7 +6,7 @@ import { getAssetSummary, formatCurrency } from "../utils/helpers";
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
-export default function StrategyView() {
+export default function StrategyView({ navigate }) {
   const { portfolio, currentPrices, exchangeRates } = usePortfolio();
 
   const [useMargin, setUseMargin] = useState(false);
@@ -30,6 +30,9 @@ export default function StrategyView() {
     }
   });
 
+  const [maxMarginLeverage, setMaxMarginLeverage] = useState(
+    () => parseFloat(localStorage.getItem("wf_maxMarginLeverage")) || 0,
+  );
   const [showCostHelp, setShowCostHelp] = useState(false);
 
   useEffect(() => {
@@ -38,7 +41,8 @@ export default function StrategyView() {
     localStorage.setItem("wf_marketVol", marketVol);
     localStorage.setItem("wf_swapSpread", swapSpread);
     localStorage.setItem("wf_categoryVols", JSON.stringify(categoryVols));
-  }, [fedRate, platformRate, marketVol, swapSpread, categoryVols]);
+    localStorage.setItem("wf_maxMarginLeverage", maxMarginLeverage);
+  }, [fedRate, platformRate, marketVol, swapSpread, categoryVols, maxMarginLeverage]);
 
   const assets = getAssetSummary(portfolio, currentPrices);
 
@@ -109,7 +113,6 @@ export default function StrategyView() {
 
   // Calculate best/cheapest assets per category
   const bestLeveragePerCat = {};
-  const best1xPerCat = {};
   const cheapestPerCat = {};
   assets.forEach((a) => {
     const mix =
@@ -128,13 +131,6 @@ export default function StrategyView() {
           weight: weight,
           ter: assetTer,
         };
-      }
-      // For margin rebalancing (closest to 1x)
-      if (
-        !best1xPerCat[cat] ||
-        Math.abs(weight - 1.0) < Math.abs(best1xPerCat[cat].weight - 1.0)
-      ) {
-        best1xPerCat[cat] = { symbol: a.symbol, weight: weight, ter: assetTer };
       }
       // Cheapest in category
       if (!cheapestPerCat[cat] || assetTer < cheapestPerCat[cat].ter) {
@@ -161,13 +157,11 @@ export default function StrategyView() {
     let nonDebtTargetPctSum = 0;
     Object.entries(portfolio.targetAllocation).forEach(([cat, targetPct]) => {
       const isDebt = portfolio.debtCategories?.includes(cat);
-      const instrument = useMargin
-        ? best1xPerCat[cat] || { symbol: "?", weight: 1.0 }
-        : bestLeveragePerCat[cat] || { symbol: "?", weight: 1.0 };
+      const instrument = bestLeveragePerCat[cat] || { symbol: "?", weight: 1.0 };
 
       catConfigs[cat] = {
         weight: targetPct / 100,
-        leverage: useMargin ? 1.0 : instrument.weight,
+        leverage: instrument.weight,
         symbol: instrument.symbol,
         ter: instrument.ter,
         benchmarkTer: cheapestPerCat[cat]?.ter || 0.1,
@@ -230,7 +224,7 @@ export default function StrategyView() {
       const config = catConfigs[cat] || {
         weight: 0,
         leverage: 1.0,
-        symbol: best1xPerCat[cat]?.symbol || "?",
+        symbol: bestLeveragePerCat[cat]?.symbol || "?",
         ter: 0,
         benchmarkTer: 0,
         currentExp: exposureRepData[cat] || 0,
@@ -275,12 +269,81 @@ export default function StrategyView() {
     finalTargetExposure = finalNetWorth * targetRatio;
   }
 
+  const marginPlanTotalBuy = useMargin
+    ? buyPlan
+        .filter((i) => i.type === "BUY")
+        .reduce((a, b) => a + (b.amount || 0), 0)
+    : 0;
+
+  const maxAllowedMarginCash =
+    useMargin && maxMarginLeverage > 0
+      ? (maxMarginLeverage - 1) * totalValueBase
+      : Infinity;
+
+  const marginContribution =
+    useMargin && maxMarginLeverage > 0
+      ? Math.min((maxMarginLeverage - 1) * totalValueBase, marginPlanTotalBuy)
+      : marginPlanTotalBuy;
+
+  const isHybridMode =
+    useMargin && maxMarginLeverage > 0 && marginPlanTotalBuy > maxAllowedMarginCash + 0.01;
+
+  const hybridRealCash = isHybridMode
+    ? Math.max(0, marginPlanTotalBuy - marginContribution)
+    : 0;
+
+  // True infeasibility: even max margin + max LETFs combined can't reach the target ratio
+  const hasMarginCap_TrulyInfeasible =
+    useMargin &&
+    maxMarginLeverage > 0 &&
+    maxMarginLeverage * maxPossibleLeverage < targetRatio - 0.001;
+
+  const impliedMarginLeverage =
+    totalValueBase > 0 ? 1 + marginPlanTotalBuy / totalValueBase : 1;
+
   const nextBuy = buyPlan
     .filter((i) => i.type === "BUY" && i.isPossible)
     .sort((a, b) => b.amount - a.amount)[0];
 
+  const hasTargets = targetKeys.length > 0;
+
   return (
     <main id="main-content" style={{ paddingBottom: "100px" }}>
+      {!hasTargets && (
+        <div
+          className="card"
+          style={{
+            textAlign: "center",
+            padding: "48px 24px",
+            border: "1px dashed rgba(99, 102, 241, 0.4)",
+            background: "rgba(99, 102, 241, 0.03)",
+          }}
+        >
+          <div style={{ fontSize: "3rem", marginBottom: "20px" }}>🎯</div>
+          <h2 style={{ margin: "0 0 12px 0" }}>Set Your Target Strategy</h2>
+          <p
+            className="muted"
+            style={{
+              maxWidth: "450px",
+              margin: "0 auto 24px",
+              lineHeight: 1.6,
+            }}
+          >
+            To unlock the <strong>Rebalancing Engine</strong>,{" "}
+            <strong>Path to Target</strong> plans, and{" "}
+            <strong>DCA Priority</strong> indicators, you need to define how
+            much of each asset class you want to hold.
+          </p>
+          <button
+            className="btn btn-primary"
+            onClick={() => navigate("categories")}
+            style={{ padding: "12px 24px" }}
+          >
+            Configure Target Allocation
+          </button>
+        </div>
+      )}
+
       {nextBuy && (
         <div
           className="card"
@@ -636,6 +699,49 @@ export default function StrategyView() {
                 </div>
                 Use Margin
               </label>
+              {useMargin && (
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: "0.65rem",
+                      color: "var(--text-muted)",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    Max:
+                  </span>
+                  <input
+                    type="number"
+                    value={maxMarginLeverage || ""}
+                    placeholder="∞"
+                    onChange={(e) =>
+                      setMaxMarginLeverage(parseFloat(e.target.value) || 0)
+                    }
+                    step="0.1"
+                    min="1"
+                    style={{
+                      width: "48px",
+                      padding: "2px 4px",
+                      fontSize: "0.7rem",
+                      background: "rgba(0,0,0,0.3)",
+                      border: "1px solid rgba(245, 158, 11, 0.4)",
+                      color: "#f59e0b",
+                      borderRadius: "4px",
+                    }}
+                  />
+                  <span
+                    style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}
+                  >
+                    x
+                  </span>
+                </div>
+              )}
               <span
                 className="indicator"
                 style={{
@@ -654,7 +760,11 @@ export default function StrategyView() {
           >
             To reach your {portfolio.targetNetExposure?.toFixed(2)}x non-debt
             exposure target{" "}
-            {useMargin ? "by borrowing funds:" : "using your current assets:"}
+            {isHybridMode
+              ? `using ${maxMarginLeverage.toFixed(2)}x margin + real cash DCA:`
+              : useMargin
+                ? "by borrowing funds:"
+                : "using your current assets:"}
           </p>
 
           {!useMargin &&
@@ -718,7 +828,38 @@ export default function StrategyView() {
               </p>
             </div>
           )}
-          {!hasLeverageConflict && (
+          {hasMarginCap_TrulyInfeasible && (
+            <div
+              style={{
+                padding: "12px",
+                background: "rgba(239, 68, 68, 0.1)",
+                border: "1px solid rgba(239, 68, 68, 0.3)",
+                borderRadius: "8px",
+                marginBottom: "20px",
+              }}
+            >
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: "0.8rem",
+                  color: "#ef4444",
+                  fontWeight: 600,
+                  display: "flex",
+                  gap: "8px",
+                }}
+              >
+                <span>🚫</span>
+                <span>
+                  Target Unreachable: Even combining {maxMarginLeverage.toFixed(2)}x margin
+                  with your best LETFs ({maxPossibleLeverage.toFixed(2)}x) only reaches{" "}
+                  {(maxMarginLeverage * maxPossibleLeverage).toFixed(2)}x — below your{" "}
+                  {targetRatio.toFixed(2)}x goal. Add higher-leverage ETFs, raise your
+                  margin cap, or lower your target.
+                </span>
+              </p>
+            </div>
+          )}
+          {!hasLeverageConflict && !hasMarginCap_TrulyInfeasible && (
             <>
               <div
                 style={{
@@ -1038,29 +1179,97 @@ export default function StrategyView() {
                       gap: "12px",
                     }}
                   >
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                      }}
-                    >
-                      <p
+                    {isHybridMode ? (
+                      <div
                         style={{
-                          margin: 0,
-                          fontSize: "0.75rem",
-                          color: "#f59e0b",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: "6px",
+                          padding: "10px",
+                          background: "rgba(99, 102, 241, 0.06)",
+                          borderRadius: "6px",
+                          border: "1px solid rgba(99, 102, 241, 0.2)",
                         }}
                       >
-                        Total Margin Required:
-                      </p>
-                      <strong style={{ color: "#f59e0b" }}>
-                        {formatCurrency(
-                          buyPlan.reduce((a, b) => a + (b.amount || 0), 0),
-                          portfolio.baseCurrency,
-                        )}
-                      </strong>
-                    </div>
+                        <div
+                          style={{
+                            fontSize: "0.65rem",
+                            color: "#818cf8",
+                            fontWeight: 600,
+                            textTransform: "uppercase",
+                            letterSpacing: "0.05em",
+                            marginBottom: "4px",
+                          }}
+                        >
+                          HYBRID PLAN — MARGIN + DCA
+                        </div>
+                        <div
+                          className="flex-between"
+                          style={{ fontSize: "0.75rem", color: "#f59e0b" }}
+                        >
+                          <span>
+                            Margin at {maxMarginLeverage.toFixed(2)}x cap:
+                          </span>
+                          <strong>
+                            {formatCurrency(
+                              marginContribution,
+                              portfolio.baseCurrency,
+                            )}
+                          </strong>
+                        </div>
+                        <div
+                          className="flex-between"
+                          style={{ fontSize: "0.75rem", color: "#10b981" }}
+                        >
+                          <span>Real cash to DCA:</span>
+                          <strong>
+                            {formatCurrency(hybridRealCash, portfolio.baseCurrency)}
+                          </strong>
+                        </div>
+                        <div
+                          className="flex-between"
+                          style={{
+                            fontSize: "0.75rem",
+                            color: "var(--text-muted)",
+                            borderTop: "1px solid rgba(255,255,255,0.06)",
+                            paddingTop: "6px",
+                            marginTop: "2px",
+                          }}
+                        >
+                          <span>Total buying power:</span>
+                          <strong style={{ color: "#f59e0b" }}>
+                            {formatCurrency(
+                              marginPlanTotalBuy,
+                              portfolio.baseCurrency,
+                            )}
+                          </strong>
+                        </div>
+                      </div>
+                    ) : (
+                      <div
+                        style={{
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                        }}
+                      >
+                        <p
+                          style={{
+                            margin: 0,
+                            fontSize: "0.75rem",
+                            color: "#f59e0b",
+                          }}
+                        >
+                          Total Margin Required:
+                        </p>
+                        <strong style={{ color: "#f59e0b" }}>
+                          {formatCurrency(
+                            marginPlanTotalBuy,
+                            portfolio.baseCurrency,
+                          )}
+                        </strong>
+                      </div>
+                    )}
 
                     <div
                       style={{
@@ -1126,8 +1335,7 @@ export default function StrategyView() {
                         <span>Est. Annual Cost:</span>
                         <strong>
                           {formatCurrency(
-                            buyPlan.reduce((a, b) => a + (b.amount || 0), 0) *
-                              (platformRate / 100),
+                            marginContribution * (platformRate / 100),
                             portfolio.baseCurrency,
                           )}
                         </strong>
@@ -1144,9 +1352,7 @@ export default function StrategyView() {
                         <span>Monthly "Rent":</span>
                         <span>
                           {formatCurrency(
-                            (buyPlan.reduce((a, b) => a + (b.amount || 0), 0) *
-                              (platformRate / 100)) /
-                              12,
+                            (marginContribution * (platformRate / 100)) / 12,
                             portfolio.baseCurrency,
                           )}
                         </span>
@@ -1172,14 +1378,25 @@ export default function StrategyView() {
                           opacity: 0.9,
                         }}
                       >
-                        <span>Projected Debt/Equity Ratio:</span>
+                        <span>Margin Leverage:</span>
                         <strong>
                           {(
-                            (buyPlan.reduce((a, b) => a + (b.amount || 0), 0) /
-                              totalValueBase) *
-                            100
-                          ).toFixed(1)}
-                          %
+                            1 +
+                            marginContribution / totalValueBase
+                          ).toFixed(2)}
+                          x
+                          {isHybridMode && (
+                            <span
+                              style={{
+                                marginLeft: "6px",
+                                fontSize: "0.65rem",
+                                color: "#818cf8",
+                                fontWeight: 400,
+                              }}
+                            >
+                              (capped at {maxMarginLeverage.toFixed(2)}x)
+                            </span>
+                          )}
                         </strong>
                       </p>
                       <p
@@ -1192,7 +1409,7 @@ export default function StrategyView() {
                           opacity: 0.9,
                         }}
                       >
-                        <span>Final Leverage:</span>
+                        <span>Equity Leverage:</span>
                         <strong>{targetRatio.toFixed(2)}x</strong>
                       </p>
                     </div>

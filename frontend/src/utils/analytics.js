@@ -202,10 +202,16 @@ export async function calculateAnalytics(
       price: 0,
       currency: "USD",
     };
+    
+    let price = priceData.price;
+    if (!price) {
+      price = lastKnownPrices[asset.symbol] || 0;
+    }
+
     const rate =
       localExchangeRates[`${priceData.currency}${portfolio.baseCurrency}`] ||
       1.0;
-    currentLiveValueTotal += asset.quantity * priceData.price * rate;
+    currentLiveValueTotal += asset.quantity * price * rate;
     currentLiveCostTotal += asset.totalCost * rate;
   }
 
